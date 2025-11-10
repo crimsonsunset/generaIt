@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Input } from '@heroui/input'
 import { Button } from '@heroui/button'
 import { PaperAirplaneIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import { TypingIndicator } from './TypingIndicator.component'
 import { useAppStore } from '@/stores/app.store'
 import { useResponsiveSidebar } from '@/hooks/app.hooks'
+import { useThreadStore } from '@/stores/thread.store'
 
 interface ChatInputProps {
   sendMessage: (content: string) => Promise<void>
@@ -14,11 +15,33 @@ interface ChatInputProps {
 /**
  * ChatInput component - Input field + send button for sending messages
  * Disabled during streaming, Enter key to send, Shift+Enter for newline
+ * Auto-focuses when a new thread is created
  */
 export function ChatInput({ sendMessage, isStreaming }: ChatInputProps) {
   const [inputValue, setInputValue] = useState('')
   const { setThreadDrawerOpen } = useAppStore()
   const { isSmallScreen } = useResponsiveSidebar()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const currentThread = useThreadStore((state) => state.getCurrentThread())
+  const currentThreadId = useThreadStore((state) => state.currentThreadId)
+  const previousThreadIdRef = useRef<string | null>(null)
+
+  // Auto-focus input when a new thread is created (thread changes and has no messages)
+  useEffect(() => {
+    if (
+      currentThreadId &&
+      currentThreadId !== previousThreadIdRef.current &&
+      currentThread &&
+      currentThread.messages.length === 0 &&
+      !isStreaming
+    ) {
+      // Small delay to ensure input is rendered
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+    }
+    previousThreadIdRef.current = currentThreadId
+  }, [currentThreadId, currentThread, isStreaming])
 
   const handleSend = useCallback(() => {
     const trimmedValue = inputValue.trim()
@@ -65,6 +88,7 @@ export function ChatInput({ sendMessage, isStreaming }: ChatInputProps) {
           </Button>
         )}
         <Input
+          ref={inputRef}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
