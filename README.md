@@ -12,9 +12,10 @@ A modern, type-safe chatbot interface built with React, TypeScript, and TanStack
 
 ### UI & Styling
 - **HeroUI 2.x** - Beautiful React component library (formerly NextUI)
-- **Tailwind CSS 3.x** - Utility-first CSS framework
+- **Tailwind CSS 4.x** - Utility-first CSS framework
 - **Heroicons** - Icon library for React (official Tailwind CSS icons)
 - **Framer Motion** - Animation library (required by HeroUI)
+- **Recharts** - Charting library for data visualization (dashboard usage chart)
 
 ### State & Data Management
 - **Zustand 5.x** - Lightweight state management for chat state and UI preferences
@@ -24,6 +25,7 @@ A modern, type-safe chatbot interface built with React, TypeScript, and TanStack
 ### Streaming & Infrastructure
 - **Real Ollama API** - Self-hosted LLM at `api.joesangiorgio.com/llm/*`
 - **OpenAI-Compatible Endpoint** - `/v1/chat/completions` with SSE streaming
+- **@microsoft/fetch-event-source** - SSE streaming library with POST support
 - **Secure Tunnel** - External access to local server
 - **Netlify Proxy** - Hides internal infrastructure behind `api.joesangiorgio.com`
 - **Model:** qwen2.5:0.5b (tiny, resource-efficient LLM)
@@ -40,15 +42,19 @@ A modern, type-safe chatbot interface built with React, TypeScript, and TanStack
 ✅ **Dashboard Layout** - Sidebar navigation with theme toggle and user avatar  
 ✅ **Full Routing System** - File-based routing with TanStack Router  
 ✅ **Dark/Light Theme** - Seamless theme switching with HeroUI provider  
-✅ **Responsive Layout** - Mobile-friendly design  
+✅ **Responsive Layout** - Mobile-friendly design with drawer sidebar on small screens  
 ✅ **Type-Safe Navigation** - Full TypeScript inference for routes and navigation  
 ✅ **Path Aliases** - Clean imports using `@stores`, `@components`, etc.  
 ✅ **Production API** - Real Ollama LLM API deployed and working  
-✅ **Font Loading** - Self-hosted fonts via npm (@fontsource)
+✅ **Font Loading** - Self-hosted fonts via npm (@fontsource)  
 ✅ **Chatbot Components** - Complete chat interface with thread management, message display, and input  
 ✅ **SSE Streaming** - Character-by-character streaming with @microsoft/fetch-event-source  
 ✅ **Thread Management** - Multi-thread support with localStorage persistence and URL deep linking  
-✅ **Chat UI** - User and AI message bubbles with typing indicators and empty states
+✅ **Chat UI** - User and AI message bubbles with typing indicators and empty states  
+✅ **Auto-Scroll** - Automatic scrolling to bottom on new messages  
+✅ **Keyboard Shortcuts** - Enter to send message, Shift+Enter for newline  
+✅ **Empty Message Prevention** - Validation to prevent sending empty messages  
+✅ **Typing Indicator** - Animated dots during streaming (Framer Motion)
 
 ## 📁 Project Structure
 
@@ -57,7 +63,10 @@ test-starter/
 ├── src/
 │   ├── routes/              # File-based routing (TanStack Router)
 │   ├── components/          # Reusable React components
-│   │   └── chatbot/       # Chatbot-specific components
+│   │   ├── chat/          # Chat interface components
+│   │   ├── dashboard/     # Dashboard widgets
+│   │   ├── layout/        # App layout components
+│   │   └── auth/          # Authentication components
 │   ├── hooks/              # Custom React hooks
 │   ├── stores/             # Zustand state management
 │   ├── types/              # TypeScript type definitions
@@ -72,13 +81,13 @@ All top-level `src` directories use path aliases for clean imports:
 
 ```typescript
 import { useAppStore } from '@stores/app.store'
-import { Chatbot } from '@components/chatbot/Chatbot.component'
+import { ChatPanel } from '@components/chat/ChatPanel.component'
 import { ChatMessage } from '@types/chat.types'
 ```
 
 ### File Naming Convention
-- **Components**: `PascalCase.component.tsx` (e.g., `Chatbot.component.tsx`)
-- **Hooks**: `kebab-case.hook.ts` (e.g., `use-chatbot.hook.ts`)
+- **Components**: `PascalCase.component.tsx` (e.g., `ChatPanel.component.tsx`)
+- **Hooks**: `kebab-case.hooks.ts` (e.g., `chat.hooks.ts`)
 - **Stores**: `kebab-case.store.ts` (e.g., `app.store.ts`)
 - **Types**: `kebab-case.types.ts` (e.g., `chat.types.ts`)
 - **Routes**: `kebab-case.tsx` (TanStack Router convention)
@@ -158,9 +167,9 @@ Additional documentation can be found in the `docs/` directory:
 
 See [docs/roadmap.md](./docs/roadmap.md) for the full feature roadmap and implementation phases.
 
-**Current Status**: Phases 0-5 complete! ✅ Auth, Dashboard, API, Chat Route, Thread Management, SSE Streaming, and Chat UI Components all implemented.  
-**Next Phase**: Phase 6 - UX Enhancements (auto-scroll improvements, keyboard shortcuts, visual polish)  
-**Timeline**: ~1-2 hours remaining for UX enhancements and polish
+**Current Status**: Phases 0-5 complete! ✅ Auth, Dashboard, API, Chat Route, Thread Management, SSE Streaming, and Chat UI Components all implemented. Phase 6 partially complete (auto-scroll, Enter key, typing animation, empty message prevention).  
+**Next Phase**: Complete remaining UX enhancements, edge cases, error handling, accessibility, and documentation  
+**Timeline**: ~2-3 hours remaining for polish and edge cases
 
 ## 📄 License
 

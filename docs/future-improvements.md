@@ -14,6 +14,14 @@ This document tracks planned improvements and refactoring opportunities for the 
 
 **[Testing Infrastructure](#testing-infrastructure):** Establish complete testing suite with Vitest for unit tests, React Testing Library for component tests, Playwright for E2E tests, and MSW for mocking AI responses to enable safe refactoring and catch regressions.
 
+**[Remaining UX Enhancements](#remaining-ux-enhancements):** Complete Phase 6 items including auto-scroll refactoring, additional keyboard shortcuts (Escape to clear, focus management), visual polish (message animations, hover states, timestamps), and improved scroll detection.
+
+**[Edge Cases & Input Validation](#edge-cases--input-validation):** Handle rapid message sending, long message wrapping, special character handling, maximum message length validation, and other edge cases for production readiness.
+
+**[Accessibility Improvements](#accessibility-improvements):** Add ARIA labels, aria-live regions for streaming messages, aria-busy states, keyboard navigation support, and screen reader compatibility.
+
+**[Code Quality & Documentation](#code-quality--documentation):** Add JSDoc comments to all functions, remove console.logs, fix linter warnings, extract magic numbers to constants, and complete documentation including SSE implementation details, infrastructure architecture, and deployment guides.
+
 ## URL & Thread ID Deep Linking State Management
 
 ### Problem Statement
@@ -749,4 +757,177 @@ export default defineConfig({
 - `src/mocks/` - MSW handlers directory (to be created)
 - `src/test/` - Test utilities and setup (to be created)
 - `e2e/` - E2E test directory (to be created)
+
+## Remaining UX Enhancements
+
+### Overview
+
+Phase 6 from the roadmap includes several UX enhancements that are partially complete. The following items remain to be implemented:
+
+### Auto-Scroll Improvements
+
+**Current State:**
+- Auto-scroll is implemented inline in `ChatConversation.component.tsx`
+- Scrolls to bottom on new messages and during streaming
+- Uses smooth scroll behavior
+
+**Remaining Work:**
+- [ ] Refactor auto-scroll logic into dedicated `use-auto-scroll.hook.ts` hook
+- [ ] Detect manual scroll (don't force scroll if user has scrolled up)
+- [ ] Add scroll position tracking to prevent interrupting user's reading
+
+**Related Files:**
+- `src/components/chat/ChatConversation.component.tsx` - Current inline implementation (lines 38-69)
+- `src/hooks/` - Where new hook should be created
+
+### Additional Keyboard Shortcuts
+
+**Current State:**
+- Enter to send message: ✅ Implemented
+- Shift+Enter for newline: ✅ Implemented
+
+**Remaining Work:**
+- [ ] Escape key to clear input field
+- [ ] Focus management after sending (auto-focus input after send)
+- [ ] Tab navigation support for thread list and messages
+- [ ] Cmd/Ctrl+K to focus input (optional enhancement)
+
+**Related Files:**
+- `src/components/chat/ChatInput.component.tsx` - Current keyboard handling (lines 33-38)
+
+### Visual Polish
+
+**Current State:**
+- Typing indicator animation: ✅ Implemented with Framer Motion
+
+**Remaining Work:**
+- [ ] Message fade-in animations when messages appear
+- [ ] Hover states on messages (subtle highlight on hover)
+- [ ] Timestamps display (relative format: "Just now", "2m ago") - optional
+- [ ] Message copy functionality (copy message text to clipboard)
+
+**Related Files:**
+- `src/components/chat/Message.component.tsx` - Where animations and hover states would be added
+- `src/utils/thread.utils.ts` - `formatThreadDate()` function exists but not used in Message component
+
+## Edge Cases & Input Validation
+
+### Overview
+
+Phase 7.1 from the roadmap includes edge case handling. Some items are complete, others remain:
+
+### Current State
+
+- ✅ Empty message prevention: Implemented in `ChatInput.component.tsx` (line 25)
+
+### Remaining Edge Cases
+
+**Rapid Message Sending:**
+- [ ] Prevent sending multiple messages in quick succession
+- [ ] Options: Queue messages or disable send button during streaming
+- [ ] Consider debouncing send button clicks
+
+**Long Message Handling:**
+- [ ] Ensure long messages wrap properly
+- [ ] Verify scrolling works correctly for very long messages
+- [ ] Test with messages exceeding viewport height
+
+**Input Validation:**
+- [ ] Special character handling (ensure all Unicode characters work correctly)
+- [ ] Maximum message length validation (e.g., 10,000 characters)
+- [ ] Show character count indicator (optional)
+- [ ] Handle extremely long single-line messages
+
+**Related Files:**
+- `src/components/chat/ChatInput.component.tsx` - Where validation would be added
+- `src/components/chat/Message.component.tsx` - Where wrapping/scrolling would be tested
+
+## Accessibility Improvements
+
+### Overview
+
+Phase 7.3 from the roadmap focuses on accessibility features for screen readers and keyboard navigation.
+
+### Current State
+
+- Basic keyboard support exists (Enter to send)
+- Some ARIA labels may be present but not comprehensive
+
+### Remaining Accessibility Work
+
+**ARIA Labels:**
+- [ ] Add `aria-label` to all interactive elements (buttons, inputs, thread items)
+- [ ] Add `aria-describedby` for form inputs with help text
+- [ ] Ensure all icons have accessible labels
+
+**Streaming Messages:**
+- [ ] Add `aria-live="polite"` region for streaming messages
+- [ ] Add `aria-busy="true"` during streaming
+- [ ] Announce when streaming starts/completes
+
+**Keyboard Navigation:**
+- [ ] Full keyboard navigation support for thread list
+- [ ] Tab order optimization
+- [ ] Escape key handling for modals and drawers
+- [ ] Arrow key navigation in thread list
+
+**Screen Reader Support:**
+- [ ] Test with screen readers (NVDA, JAWS, VoiceOver)
+- [ ] Ensure all dynamic content is announced
+- [ ] Add skip links for main content
+- [ ] Ensure proper heading hierarchy
+
+**Related Files:**
+- `src/components/chat/ChatInput.component.tsx` - Add ARIA attributes
+- `src/components/chat/ChatConversation.component.tsx` - Add aria-live region
+- `src/components/chat/ThreadSidebar.component.tsx` - Add keyboard navigation
+- All chat components - Add ARIA labels
+
+## Code Quality & Documentation
+
+### Overview
+
+Phase 8 from the roadmap focuses on code quality improvements and comprehensive documentation.
+
+### Code Quality (Phase 8.1)
+
+**Current State:**
+- Some JSDoc comments exist but not comprehensive
+- Console.logs present throughout codebase (for debugging)
+- Linter warnings may exist
+
+**Remaining Work:**
+- [ ] Add JSDoc comments to all functions and components
+- [ ] Remove or replace console.logs with proper logging solution
+- [ ] Fix all linter warnings
+- [ ] Ensure strict TypeScript compliance (verify no `any` types)
+- [ ] Extract magic numbers to constants (timeouts, limits, etc.)
+- [ ] Add prop validation where appropriate
+
+**Related Files:**
+- All source files in `src/` - Need JSDoc additions
+- `src/hooks/chat.hooks.ts` - Has console.logs for debugging
+- `src/stores/thread.store.ts` - Has console.logs for debugging
+- `src/services/chat.service.ts` - Has console.logs for debugging
+
+### Documentation (Phase 8.2)
+
+**Current State:**
+- README.md exists and is mostly up to date
+- Architecture documentation exists
+- API integration guide exists
+
+**Remaining Documentation:**
+- [ ] Document SSE implementation details (how streaming works internally)
+- [ ] Explain secure tunnel + Netlify proxy architecture (diagrams)
+- [ ] Add local development instructions (setup steps, environment variables)
+- [ ] Add production deployment guide (Netlify deployment steps)
+- [ ] Document design decisions (why certain patterns were chosen)
+- [ ] Add troubleshooting guide (common issues and solutions)
+
+**Related Files:**
+- `docs/system/api-integration.md` - Add SSE implementation details
+- `docs/system/architecture.md` - Add infrastructure diagrams
+- `README.md` - Add development/deployment sections
+- `docs/` - Create new documentation files as needed
 

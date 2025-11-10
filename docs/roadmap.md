@@ -379,38 +379,30 @@ const { sendMessage, abort, isStreaming, error } = useChatStream()
 - Message bubbles with user/assistant styling
 - Streaming content updates in real-time
 
-#### 5.5 Header Components
-**Create:** `src/components/chat/ChatHeader.component.tsx`
-- Header bar above chat
-- Shows current thread title
-- Logout button (calls `auth.store.logout()`)
-- User info display (optional, shows username)
-- Uses HeroUI `Button` for logout
-
 ### Phase 6: UX Enhancements
 
-#### 6.1 Auto-Scroll
-- [ ] Create `src/hooks/use-auto-scroll.hook.ts`
-- [ ] Scroll to bottom on new messages
-- [ ] Smooth scroll animation
+#### 6.1 Auto-Scroll ✅ PARTIALLY COMPLETE
+- [x] Scroll to bottom on new messages (implemented inline in ChatConversation)
+- [x] Smooth scroll animation (implemented)
+- [ ] Create `src/hooks/use-auto-scroll.hook.ts` (refactor to dedicated hook)
 - [ ] Detect manual scroll (don't force scroll if user scrolled up)
 
-#### 6.2 Keyboard Shortcuts
-- [ ] Enter to send message
+#### 6.2 Keyboard Shortcuts ✅ PARTIALLY COMPLETE
+- [x] Enter to send message (implemented)
 - [ ] Escape to clear input
 - [ ] Focus management after sending
 - [ ] Tab navigation support
 
-#### 6.3 Visual Polish
+#### 6.3 Visual Polish ✅ PARTIALLY COMPLETE
+- [x] Typing indicator animation (bouncing dots) (implemented with Framer Motion)
 - [ ] Message fade-in animations
-- [ ] Typing indicator animation (bouncing dots)
 - [ ] Hover states on messages
 - [ ] Timestamps (relative format: "Just now", "2m ago") - optional
 
 ### Phase 7: Edge Cases & Quality
 
-#### 7.1 Edge Case Handling
-- [ ] Prevent empty message submission
+#### 7.1 Edge Case Handling ✅ PARTIALLY COMPLETE
+- [x] Prevent empty message submission (implemented)
 - [ ] Handle rapid message sending (queue or disable)
 - [ ] Long message wrapping and scrolling
 - [ ] Special character handling
@@ -500,8 +492,7 @@ test-starter/
 │   │   │   ├── Message.component.tsx
 │   │   │   ├── ChatInput.component.tsx
 │   │   │   ├── TypingIndicator.component.tsx
-│   │   │   ├── EmptyState.component.tsx
-│   │   │   └── ChatHeader.component.tsx
+│   │   │   └── EmptyState.component.tsx
 │   │   └── layout/
 │   │       └── app.layout.tsx
 │   ├── hooks/
@@ -623,19 +614,20 @@ test-starter/
 | Phase 2.2: Route Updates | 15 min | 15 min |
 | Phase 3: Store Reorganization | 10 min | 25 min |
 | Phase 4: SSE Streaming Hook | ~~45 min~~ | ✅ **DONE** |
-| Phase 5: Chat UI Components | 90 min | 205 min |
-| Phase 6: UX Enhancements | 30-45 min | 235-250 min |
-| Phase 7: Polish & Edge Cases | 30-45 min | 265-295 min |
-| Phase 8: Documentation | 15-30 min | 280-325 min |
+| Phase 5: Chat UI Components | ~~90 min~~ | ✅ **DONE** |
+| Phase 6: UX Enhancements (partial) | ~~30-45 min~~ | ✅ **PARTIALLY DONE** (auto-scroll, Enter key, typing animation, empty message prevention) |
+| Phase 6: Remaining UX Enhancements | 30-45 min | 30-45 min |
+| Phase 7: Polish & Edge Cases | 45-60 min | 75-105 min |
+| Phase 8: Documentation | 15-30 min | 90-135 min |
 
-**Remaining: 2.5-3.5 hours** for chat UI components and polish
-**Completed: 5-6 hours** (auth + dashboard + API + chat route + thread management + SSE streaming)
+**Remaining: 1.5-2.25 hours** for remaining UX enhancements, edge cases, accessibility, and documentation
+**Completed: 6-7 hours** (auth + dashboard + API + chat route + thread management + SSE streaming + chat UI + partial UX enhancements)
 
 ---
 
-**Current Status**: Phases 0-5 complete! ✅ Auth, Dashboard, API, Chat Route, Thread Management, SSE Streaming, and Chat UI Components all implemented. Ready for UX enhancements (Phase 6).  
-**Last Updated**: November 9, 2025  
-**Next Steps**: Begin Phase 6 - UX Enhancements (auto-scroll improvements, keyboard shortcuts, visual polish)
+**Current Status**: Phases 0-5 complete! ✅ Auth, Dashboard, API, Chat Route, Thread Management, SSE Streaming, and Chat UI Components all implemented. Phase 6 partially complete (auto-scroll, Enter key, typing animation, empty message prevention).  
+**Next Phase**: Complete Phase 6 remaining items, then Phase 7-8 (Edge Cases, Error Handling, Accessibility, Documentation)  
+**Timeline**: ~2-3 hours remaining for remaining UX enhancements, edge cases, and polish
 
 **Major Updates:**
 - **Nov 8, 2025:** Switched from MSW mocks to real production Ollama API! Saves time, demonstrates infrastructure knowledge. API deployed, tested, and working with OpenAI-compatible SSE streaming.
