@@ -1,0 +1,37 @@
+[build]
+  # Build command (if not using Netlify's auto-detection)
+  command = "npm run build"
+  # Directory to publish (Vite outputs to 'dist')
+  publish = "dist"
+
+# Proxy API requests through Netlify
+# Routes /api/llm/* to api.joesangiorgio.com/llm/*
+[[redirects]]
+  from = "/api/llm/*"
+  to = "https://api.joesangiorgio.com/llm/:splat"
+  status = 200
+  force = true
+
+# Redirect all other routes to index.html for client-side routing
+# This allows TanStack Router to handle all routes
+# Must come after the API proxy rule
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security headers for SPA
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
