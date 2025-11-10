@@ -16,6 +16,10 @@
 ### Strategic Planning
 - **[caching-performance-strategy.md](./caching-performance-strategy.md)** - Performance optimization strategies and implementation tiers
 - **[database-decision-guide.md](./database-decision-guide.md)** - Database technology comparison and recommendations
+- **[future-improvements.md](./future-improvements.md)** - Technical debt tracking and enhancement opportunities
+
+### Interview Preparation
+- **[INTERVIEW-PREP.md](./INTERVIEW-PREP.md)** - Concise interview reference guide with demo script and technical deep-dive
 
 ## Quick Navigation
 
@@ -32,6 +36,10 @@
 ### Future Planning
 - **Performance:** `docs/caching-performance-strategy.md`
 - **Database:** `docs/database-decision-guide.md`
+- **Improvements:** `docs/future-improvements.md`
+
+### Interview
+- **Prep Guide:** `docs/INTERVIEW-PREP.md`
 
 ## Documentation Status
 
@@ -44,10 +52,13 @@
 | system/state-management.md | ✅ Active | Nov 8, 2025 |
 | caching-performance-strategy.md | 📋 Planning | Oct 21, 2025 |
 | database-decision-guide.md | 📋 Planning | Oct 21, 2025 |
+| future-improvements.md | 📋 Planning | Nov 10, 2025 |
+| INTERVIEW-PREP.md | 🎯 Reference | Nov 10, 2025 |
 
 **Legend:**
 - ✅ Active - Current implementation documentation
 - 📋 Planning - Strategic planning for future features
+- 🎯 Reference - Quick reference and interview guides
 
 ---
 

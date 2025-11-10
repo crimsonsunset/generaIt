@@ -1,383 +1,66 @@
 # Future Improvements
 
-This document tracks planned improvements and refactoring opportunities for the codebase.
+This document tracks planned improvements and refactoring opportunities for the codebase, organized by category and priority.
 
 ## Executive Summary
 
-**[URL & Thread ID Deep Linking State Management](#url--thread-id-deep-linking-state-management):** Refactor complex state synchronization between URL params, Zustand store, and localStorage to eliminate race conditions and state fighting using a unified state machine or single source of truth pattern.
+### CODE/BUGFIXES/INFRA (Technical Debt & Foundation)
 
-**[Chat Interface UI Enhancements](#chat-interface-ui-enhancements):** Improve visual polish with custom scrollbar styling, consistent padding, and enhanced shadows for better depth and separation of chat interface elements.
+**Priority Tier 1 - CRITICAL:**
+- **[Robust Error Handling in Chat Interface](#1-robust-error-handling-in-chat-interface):** Implement comprehensive error handling with user-visible error displays, error categorization, retry mechanisms, and React error boundaries.
+- **[URL & Thread ID Deep Linking State Management](#2-url--thread-id-deep-linking-state-management):** Refactor complex state synchronization between URL params, Zustand store, and localStorage to eliminate race conditions and state fighting.
+- **[Message Deduplication Logic Cleanup](#3-message-deduplication-logic-cleanup):** Centralize duplicated message deduplication logic (currently in 4 locations) into a single utility function.
 
-**[Message Deduplication Logic Cleanup](#message-deduplication-logic-cleanup):** Centralize duplicated message deduplication logic (currently in 4 locations) into a single utility function to improve maintainability and consistency.
+**Priority Tier 2 - HIGH:**
+- **[Testing Infrastructure](#4-testing-infrastructure):** Establish complete testing suite with Vitest, React Testing Library, Playwright, and MSW.
+- **[Edge Cases & Input Validation](#5-edge-cases--input-validation):** Handle rapid message sending, long message wrapping, special character handling, and maximum message length validation.
+- **[Accessibility Improvements](#6-accessibility-improvements):** Add ARIA labels, aria-live regions, keyboard navigation support, and screen reader compatibility.
 
-**[Robust Error Handling in Chat Interface](#robust-error-handling-in-chat-interface):** Implement comprehensive error handling with user-visible error displays, error categorization, retry mechanisms, and React error boundaries since errors are currently only logged to console and never shown to users.
+**Priority Tier 3 - MEDIUM:**
+- **[Code Quality & Documentation](#7-code-quality--documentation):** Add JSDoc comments, remove console.logs, fix linter warnings, and complete documentation.
+- **[Chat Interface UI Enhancements](#8-chat-interface-ui-enhancements):** Improve visual polish with custom scrollbar styling, consistent padding, and enhanced shadows.
 
-**[Testing Infrastructure](#testing-infrastructure):** Establish complete testing suite with Vitest for unit tests, React Testing Library for component tests, Playwright for E2E tests, and MSW for mocking AI responses to enable safe refactoring and catch regressions.
+### NEW FEATURES (User-Facing)
 
-**[Remaining UX Enhancements](#remaining-ux-enhancements):** Complete Phase 6 items including auto-scroll refactoring, additional keyboard shortcuts (Escape to clear, focus management), visual polish (message animations, hover states, timestamps), and improved scroll detection.
+**Priority Tier 1 - ESSENTIAL:**
+- **[Markdown Rendering & Code Highlighting](#1-markdown-rendering--code-highlighting-):** Render Markdown in messages with syntax highlighting for code blocks, copy buttons, and math equation support.
+- **[Smart Context Window Management](#2-smart-context-window-management-):** Display token count, warn when approaching limit, auto-summarize old messages, and smart context pruning.
+- **[Conversation Templates & Prompts Library](#3-conversation-templates--prompts-library-):** Pre-defined prompt templates, user-created custom templates, prompt variables, and import/export functionality.
+- **[Stop Generation Button (AbortController UI)](#4-stop-generation-button-abortcontroller-ui-):** Let users stop AI mid-response using AbortController with visual feedback and partial response handling.
 
-**[Edge Cases & Input Validation](#edge-cases--input-validation):** Handle rapid message sending, long message wrapping, special character handling, maximum message length validation, and other edge cases for production readiness.
+**Priority Tier 2 - POWER USER:**
+- **[Multi-Model Support](#5-multi-model-support-):** Dropdown to select model, compare mode for side-by-side responses, model info cards, and per-thread model preferences.
+- **[Message Search & Filtering System](#6-message-search--filtering-system-):** Full-text search across all messages, filter by date/thread/type, keyboard shortcuts, and search history.
 
-**[Accessibility Improvements](#accessibility-improvements):** Add ARIA labels, aria-live regions for streaming messages, aria-busy states, keyboard navigation support, and screen reader compatibility.
+**Priority Tier 3 - UX ENHANCEMENTS:**
+- **[AI Response Regeneration & Alternatives](#7-ai-response-regeneration--alternatives-):** Regenerate button, show multiple response alternatives, rate responses, and track user preferences.
+- **[Remaining UX Enhancements](#8-remaining-ux-enhancements):** Auto-scroll improvements, additional keyboard shortcuts, and visual polish (animations, hover states, timestamps).
 
-**[Code Quality & Documentation](#code-quality--documentation):** Add JSDoc comments to all functions, remove console.logs, fix linter warnings, extract magic numbers to constants, and complete documentation including SSE implementation details, infrastructure architecture, and deployment guides.
+---
 
-## URL & Thread ID Deep Linking State Management
+## CODE/BUGFIXES/INFRA (Technical Debt & Foundation)
 
-### Problem Statement
+### Priority Tier 1 - CRITICAL (Do First)
 
-The current implementation in `useThreadInitialization` hook (`src/hooks/chat.hooks.ts`) has complex state synchronization logic between multiple sources of truth:
+#### 1. Robust Error Handling in Chat Interface
 
-1. **URL search params** (`threadId` from TanStack Router)
-2. **Zustand store** (`currentThreadId` from thread store)
-3. **localStorage** (threads array loaded asynchronously)
-4. **Component refs** (`initializedRef`, `lastThreadIdRef`) used to prevent loops
+**Problem:** Errors are captured but never displayed to users. No error recovery mechanisms, categorization, or boundaries.
 
-### Current Issues
+**Current Issues:**
+- `useChatStream` hook returns `error` state but it's never used in `ChatWorkspace`
+- All errors only logged to console
+- No retry mechanisms for failed streams
+- No error boundaries to catch component-level errors
+- No distinction between recoverable and non-recoverable errors
 
-#### 1. Multiple Competing State Sources
-- URL threadId and store currentThreadId can get out of sync
-- Three separate `useEffect` hooks trying to keep them synchronized:
-  - Effect 1: Loads threads from localStorage when userId changes
-  - Effect 2: Reads URL threadId → updates store (lines 37-99)
-  - Effect 3: Reads store currentThreadId → updates URL (lines 103-120)
+**Proposed Solution:**
 
-#### 2. Complex Loop Prevention Logic
-- Uses refs (`initializedRef`, `lastThreadIdRef`) to track initialization state
-- Conditional guards like `threadId === lastThreadIdRef.current && initializedRef.current` to prevent re-processing
-- Guard in Effect 3: `currentThreadId === threadId` to prevent URL updates when already in sync
-- This creates fragile state where edge cases can cause desynchronization
+**Error Display Components:**
+- `ErrorBanner.component.tsx` - Dismissible error banner at top
+- `ErrorMessage.component.tsx` - Inline error in message list
+- `ErrorBoundary.component.tsx` - React error boundary wrapper
 
-#### 3. Race Conditions
-- Threads load asynchronously from localStorage
-- URL threadId might be processed before threads are loaded
-- Logic waits for `threads.length > 0` but doesn't handle partial loads or errors gracefully
-
-#### 4. Duplicated Logic
-- "Use most recent thread" logic appears in multiple places:
-  - When invalid threadId in URL (lines 74-79)
-  - When no threadId in URL (lines 86-93)
-  - In thread store `deleteThread` (lines 178-179)
-
-#### 5. Edge Cases Not Handled Well
-- Thread deleted while it's the current thread → store updates but URL might not sync properly
-- User navigates directly to `/chat?threadId=invalid` → multiple navigation calls possible
-- Threads cleared (logout) → initialization refs might not reset properly
-
-### Proposed Solution
-
-#### Option 1: Single Source of Truth (URL-First)
-- **URL is the single source of truth** for thread selection
-- Store `currentThreadId` becomes derived from URL, not independent
-- Remove Effect 3 (URL sync) entirely
-- Store only updates when URL changes, never the reverse
-- Components read threadId from URL, not from store
-
-**Pros:**
-- Eliminates state fighting
-- Simpler mental model
-- Better for deep linking (URL always reflects state)
-
-**Cons:**
-- Requires URL updates for all thread changes (even programmatic ones)
-- Might feel less "reactive" for some interactions
-
-#### Option 2: Store-First with Controlled URL Sync
-- **Store is the single source of truth**
-- URL becomes a "view" of store state
-- Use a single effect that reads store → updates URL (one direction only)
-- Thread selection always goes through store actions
-- URL changes trigger store updates, but store never reads URL directly
-
-**Pros:**
-- More React-like (state-driven)
-- Easier to reason about programmatic changes
-- Store actions can handle all thread logic
-
-**Cons:**
-- URL might lag behind store updates
-- Deep linking requires store initialization first
-
-#### Option 3: Unified State Machine (Recommended)
-- Use a state machine pattern (e.g., XState or custom) to manage:
-  - `loading` → threads loading from localStorage
-  - `ready` → threads loaded, can select thread
-  - `syncing` → URL and store syncing (prevent loops)
-- Single effect that handles all state transitions
-- Clear state transitions prevent race conditions
-- URL and store always in sync through state machine
-
-**Pros:**
-- Eliminates race conditions
-- Clear state transitions
-- Easy to debug (can log state machine transitions)
-- Handles all edge cases explicitly
-
-**Cons:**
-- Requires additional dependency or custom implementation
-- More upfront complexity, but simpler long-term
-
-### Implementation Notes
-
-- Consider using TanStack Router's built-in search param validation and sync features
-- Evaluate if Zustand middleware could help with URL synchronization
-- Add comprehensive tests for edge cases before refactoring
-- Document the chosen approach clearly in code comments
-
-### Related Files
-- `src/hooks/chat.hooks.ts` - Main hook with state fighting logic
-- `src/stores/thread.store.ts` - Store that manages thread state
-- `src/routes/chat.tsx` - Route component that uses the hook
-
-## Chat Interface UI Enhancements
-
-### Scrollbar Styling and Padding Improvements
-
-#### Current State
-- The `ChatConversation` component (`src/components/chat/ChatConversation.component.tsx`) uses default browser scrollbar styling via `overflow-y-auto` (line 86)
-- Padding is minimal: `pl-4 pr-0 py-6` - left padding only, no right padding
-- No custom scrollbar styling for better visual integration with the design system
-- Scrollbar appears on the far right edge with default browser appearance
-
-#### Proposed Improvements
-1. **Custom Scrollbar Styling**
-   - Add Tailwind CSS scrollbar utilities or custom CSS for styled scrollbar
-   - Match scrollbar colors to theme (light/dark mode support)
-   - Consider thinner, more subtle scrollbar design
-   - Add hover states for better UX
-
-2. **Improved Padding**
-   - Add consistent right padding (`pr-4` or `pr-6`) to match left padding
-   - Ensure messages don't touch the scrollbar edge
-   - Consider responsive padding adjustments for different screen sizes
-   - Add horizontal padding to `ChatInput` component for visual alignment
-
-#### Related Files
-- `src/components/chat/ChatConversation.component.tsx` - Scrollable message container (line 86)
-- `src/components/chat/ChatInput.component.tsx` - Input component padding (line 36)
-- `src/index.css` or `src/styles/` - Where scrollbar styling would be added
-
-### Shadows Around Chat Interface Elements
-
-#### Current State
-- `Message` component (`src/components/chat/Message.component.tsx`) uses HeroUI Card with `shadow="sm"` (line 29)
-- `ChatInput` component has no shadow - just a border-top divider (line 36)
-- Overall chat interface lacks visual depth and separation from background
-- Message bubbles could benefit from more prominent elevation
-
-#### Proposed Improvements
-1. **Enhanced Message Shadows**
-   - Increase shadow intensity for message cards (`shadow="md"` or `shadow="lg"`)
-   - Consider different shadow styles for user vs assistant messages
-   - Add subtle hover effects on messages for interactivity
-
-2. **Chat Input Shadow**
-   - Add shadow to `ChatInput` container to create floating effect
-   - Use `shadow-lg` or custom shadow for elevated appearance
-   - Ensure shadow works well in both light and dark themes
-
-3. **Overall Chat Container**
-   - Consider adding subtle shadow to `ChatWorkspace` or `ChatPanel` containers
-   - Create layered depth effect with multiple shadow levels
-   - Ensure shadows don't conflict with existing HeroUI component shadows
-
-#### Related Files
-- `src/components/chat/Message.component.tsx` - Message card shadow (line 29)
-- `src/components/chat/ChatInput.component.tsx` - Input container (line 36)
-- `src/components/chat/ChatWorkspace.component.tsx` - Main chat container (line 22)
-- `src/components/chat/ChatPanel.component.tsx` - Panel container (line 14)
-
-## Message Deduplication Logic Cleanup
-
-### Problem Statement
-
-Message deduplication logic is currently duplicated across multiple locations in the codebase, making it harder to maintain and potentially inconsistent.
-
-#### Current Duplication
-
-1. **ChatConversation Component** (`src/components/chat/ChatConversation.component.tsx`, lines 26-37)
-   - Filters messages by ID using `useMemo` hook
-   - Creates a `Set` to track seen message IDs
-   - Logs warnings for duplicate messages
-   - Runs on every render when `currentThread?.messages` changes
-
-2. **Thread Store - addMessage** (`src/stores/thread.store.ts`, lines 112-117)
-   - Checks if message with same ID already exists before adding
-   - Uses `thread.messages.some()` to check for duplicates
-   - Skips adding if duplicate found, logs warning
-   - Prevents duplicates at the source (when adding new messages)
-
-3. **Thread Store - loadThreads** (`src/stores/thread.store.ts`, lines 208-222)
-   - Deduplicates messages when loading from localStorage
-   - Uses `Set` to track seen message IDs
-   - Filters out duplicates, keeping first occurrence
-   - Handles date conversion and deduplication in same pass
-
-4. **Thread Store - saveThreads** (`src/stores/thread.store.ts`, lines 252-261)
-   - Deduplicates messages before saving to localStorage
-   - Uses same `Set` pattern as `loadThreads`
-   - Ensures clean data before persistence
-
-### Issues with Current Approach
-
-1. **Code Duplication**
-   - Same deduplication logic (Set-based filtering) appears in 4 different places
-   - Slight variations in implementation could lead to inconsistencies
-   - Changes to deduplication logic require updates in multiple files
-
-2. **Performance Concerns**
-   - `ChatConversation` deduplicates on every render (even if messages haven't changed)
-   - Multiple passes over message arrays in store operations
-   - Could be optimized with a single utility function
-
-3. **Maintenance Burden**
-   - Bug fixes or improvements need to be applied in multiple locations
-   - Harder to ensure consistent behavior across all deduplication points
-   - Testing requires checking multiple code paths
-
-### Proposed Solution
-
-#### Create Centralized Deduplication Utility
-
-Create a utility function in `src/utils/thread.utils.ts`:
-
-```typescript
-/**
- * Deduplicates messages by ID, keeping the first occurrence of each ID
- * @param messages - Array of messages to deduplicate
- * @param context - Optional context string for logging (e.g., 'loadThreads', 'addMessage')
- * @returns Deduplicated array of messages
- */
-export function deduplicateMessages(
-  messages: ChatMessage[], 
-  context?: string
-): ChatMessage[]
-```
-
-#### Refactor All Locations
-
-1. **ChatConversation Component**
-   - Replace inline deduplication with utility function call
-   - Keep `useMemo` for performance, but use utility inside
-
-2. **Thread Store - addMessage**
-   - Remove inline duplicate check
-   - Rely on utility function if needed, or keep simple `some()` check for performance
-   - Consider: is this check even necessary if we prevent duplicates at creation?
-
-3. **Thread Store - loadThreads**
-   - Replace inline deduplication with utility function
-   - Pass context string for better logging
-
-4. **Thread Store - saveThreads**
-   - Replace inline deduplication with utility function
-   - Pass context string for better logging
-
-#### Additional Considerations
-
-- **Root Cause Analysis**: Investigate why duplicates are occurring in the first place
-  - Are message IDs being reused incorrectly?
-  - Is there a race condition in message creation?
-  - Are there issues with the streaming update logic?
-
-- **Prevention vs. Cleanup**: Focus on preventing duplicates rather than cleaning them up
-  - Ensure `generateMessageId()` always produces unique IDs
-  - Add validation in `addMessage` to prevent duplicate additions
-  - Consider using a Set-based data structure for messages if order isn't critical
-
-- **Performance Optimization**: 
-  - Consider if `ChatConversation` deduplication is necessary if store already prevents duplicates
-  - May be able to remove component-level deduplication entirely if store is reliable
-
-### Related Files
-- `src/components/chat/ChatConversation.component.tsx` - Component-level deduplication (lines 26-37)
-- `src/stores/thread.store.ts` - Store-level deduplication in 3 locations:
-  - `addMessage` (lines 112-117)
-  - `loadThreads` (lines 208-222)
-  - `saveThreads` (lines 252-261)
-- `src/utils/thread.utils.ts` - Where new utility function should be added
-- `src/utils/thread.utils.ts` - `generateMessageId()` function to verify uniqueness
-
-## Robust Error Handling in Chat Interface
-
-### Problem Statement
-
-The current chat interface has minimal error handling that doesn't provide a good user experience:
-
-1. **Errors are captured but never displayed**
-   - `useChatStream` hook returns `error` state, but it's never destructured or used in `ChatWorkspace`
-   - All errors are only logged to console (`console.error`)
-   - Users have no visibility into what went wrong
-
-2. **No error recovery mechanisms**
-   - When a stream fails, the user has no way to retry
-   - Partial messages (from interrupted streams) are left in an incomplete state
-   - No option to cancel and retry failed requests
-
-3. **No error categorization**
-   - All errors are treated the same (network, API, parsing, etc.)
-   - No user-friendly error messages based on error type
-   - No distinction between recoverable and non-recoverable errors
-
-4. **No error boundaries**
-   - No React error boundaries to catch component-level errors
-   - Unhandled errors could crash the entire chat interface
-   - No graceful degradation when components fail
-
-5. **Limited error context**
-   - Errors don't include context about what operation failed
-   - No error metadata (timestamp, retry count, etc.)
-   - Difficult to debug production issues
-
-### Current Error Handling Gaps
-
-#### In `useChatStream` Hook (`src/hooks/chat.hooks.ts`)
-- Line 133: `error` state exists but never consumed by components
-- Lines 232-247: Errors are set but only logged
-- Line 242: Generic error handling doesn't categorize error types
-- No retry mechanism for failed streams
-- No cleanup of partial messages on error
-
-#### In `ChatWorkspace` Component (`src/components/chat/ChatWorkspace.component.tsx`)
-- Line 12: Only destructures `sendMessage` and `isStreaming`, ignores `error`
-- No error display component
-- No error recovery UI
-
-#### In `chat.service.ts` (`src/services/chat.service.ts`)
-- Lines 97-101: Parse errors are logged but don't notify user
-- Lines 103-108: Generic error callback doesn't provide error context
-- No error type classification (network vs API vs parsing)
-- No retry logic for transient failures
-
-### Proposed Improvements
-
-#### 1. Error Display Components
-
-Create error UI components to show errors to users:
-
-**`ErrorBanner.component.tsx`** - Dismissible error banner at top of chat
-- Shows error message with user-friendly text
-- Categorizes errors (network, API, parsing)
-- Includes retry button for recoverable errors
-- Auto-dismisses after timeout or manual dismiss
-- Uses HeroUI Alert/Card components for consistent styling
-
-**`ErrorMessage.component.tsx`** - Inline error message in message list
-- Shows error state for failed assistant messages
-- Displays partial content if stream was interrupted
-- Includes retry button to resend the request
-- Shows error details in expandable section
-
-**`ErrorBoundary.component.tsx`** - React error boundary wrapper
-- Catches component-level errors
-- Shows fallback UI instead of crashing
-- Logs errors for debugging
-- Provides "Reload" button to recover
-
-#### 2. Error Type Classification
-
-Create error type system in `src/types/chat.types.ts`:
-
+**Error Type System:**
 ```typescript
 export type ChatErrorType = 
   | 'network'      // Connection issues, timeouts
@@ -396,33 +79,7 @@ export interface ChatError {
 }
 ```
 
-#### 3. Enhanced Error Handling in Service Layer
-
-**`chat.service.ts` improvements:**
-- Classify errors by type (network, API, parsing)
-- Provide error context (request details, response status)
-- Return structured error objects instead of generic Error
-- Add retry logic for transient failures (network errors)
-- Handle partial stream completion gracefully
-
-#### 4. Error Recovery Mechanisms
-
-**Retry functionality:**
-- Add `retry()` function to `useChatStream` hook
-- Store failed message context for retry
-- Implement exponential backoff for retries
-- Limit retry attempts (max 3 retries)
-
-**Partial message handling:**
-- Save partial content when stream fails
-- Mark messages as "failed" or "partial"
-- Allow user to retry from last successful chunk
-- Option to discard partial message
-
-#### 5. User-Friendly Error Messages
-
-Create error message mapping:
-
+**User-Friendly Error Messages:**
 ```typescript
 const ERROR_MESSAGES = {
   network: "Connection error. Please check your internet connection and try again.",
@@ -433,501 +90,693 @@ const ERROR_MESSAGES = {
 }
 ```
 
-#### 6. Error Logging and Monitoring
+**Implementation Phases:**
+1. Create error display components
+2. Add error type classification
+3. Implement retry functionality
+4. Add error boundaries
+5. Enhanced logging and monitoring
 
-- Log errors with context to console (development)
-- Include error metadata (timestamp, error type, user action)
-- Consider error tracking service integration (Sentry, etc.) for production
-- Track error rates and patterns
+**Related Files:**
+- `src/hooks/chat.hooks.ts` - Hook with unused error state (line 133)
+- `src/components/chat/ChatWorkspace.component.tsx` - Component ignoring error (line 12)
+- `src/services/chat.service.ts` - Minimal error handling
+- `src/types/chat.types.ts` - Add error types here
 
-### Implementation Plan
+---
 
-1. **Phase 1: Error Display**
-   - Create `ErrorBanner` component
-   - Update `ChatWorkspace` to display errors
-   - Add error prop passing through component tree
+#### 2. URL & Thread ID Deep Linking State Management
 
-2. **Phase 2: Error Classification**
-   - Add error types to `chat.types.ts`
-   - Update service layer to classify errors
-   - Create error message mapping
+**Problem:** Complex state synchronization between URL params, Zustand store, and localStorage creates race conditions and state fighting.
 
-3. **Phase 3: Error Recovery**
-   - Add retry functionality to hook
-   - Create retry UI components
-   - Implement partial message handling
+**Current Issues:**
+- Three competing sources of truth: URL, Zustand, localStorage
+- Three separate useEffect hooks trying to sync state
+- Uses refs for loop prevention (fragile pattern)
+- Race conditions when threads load asynchronously
+- Edge cases not handled well (deleted thread, invalid threadId, etc.)
 
-4. **Phase 4: Error Boundaries**
-   - Add React error boundary wrapper
-   - Wrap chat components in error boundary
-   - Add fallback UI for component errors
+**Proposed Solutions:**
 
-5. **Phase 5: Enhanced Error Handling**
-   - Add retry logic with exponential backoff
-   - Improve error context and logging
-   - Add error analytics/tracking
+**Option 1: URL-First (Single Source of Truth)**
+- URL is the single source of truth for thread selection
+- Store `currentThreadId` becomes derived from URL
+- Eliminates state fighting
 
-### Related Files
-- `src/hooks/chat.hooks.ts` - Hook with error state (line 133) that's never used
-- `src/components/chat/ChatWorkspace.component.tsx` - Component that ignores error state (line 12)
-- `src/services/chat.service.ts` - Service layer with minimal error handling
-- `src/types/chat.types.ts` - Where error types should be added
-- `src/components/chat/` - Where error display components should be created
+**Option 2: Store-First with Controlled URL Sync**
+- Store is the single source of truth
+- URL becomes a "view" of store state
+- One-direction sync: store → URL
 
-## Testing Infrastructure
+**Option 3: Unified State Machine (Recommended)**
+- Use state machine pattern (XState or custom)
+- States: `loading` → `ready` → `syncing`
+- Clear state transitions prevent race conditions
+- Eliminates state fighting completely
 
-### Problem Statement
+**Related Files:**
+- `src/hooks/chat.hooks.ts` - Main hook with state fighting logic
+- `src/stores/thread.store.ts` - Thread state management
+- `src/routes/chat.tsx` - Route component using the hook
 
-The codebase currently has no automated testing infrastructure:
+---
 
-1. **No unit tests**
-   - Hooks, stores, services, and utilities have no test coverage
-   - No validation of business logic
-   - Refactoring is risky without tests
+#### 3. Message Deduplication Logic Cleanup
 
-2. **No integration tests**
-   - No tests for component interactions
-   - No tests for state management flows
-   - No tests for API integration
+**Problem:** Message deduplication logic duplicated in 4 locations, making maintenance difficult.
 
-3. **No E2E tests**
-   - No browser-based testing
-   - No validation of user flows
-   - No testing of real user interactions
+**Current Duplication:**
+1. `ChatConversation.component.tsx` (lines 26-37) - Component-level deduplication
+2. `thread.store.ts` - `addMessage()` (lines 112-117)
+3. `thread.store.ts` - `loadThreads()` (lines 208-222)
+4. `thread.store.ts` - `saveThreads()` (lines 252-261)
 
-4. **No test mocking**
-   - No MSW (Mock Service Worker) setup for API mocking
-   - No way to test error scenarios
-   - No deterministic testing of streaming responses
+**Proposed Solution:**
 
-### Proposed Testing Strategy
-
-#### 1. Unit Tests
-
-**Testing Framework:** Vitest (Vite-native, fast, compatible with Vite config)
-
-**Test Coverage Areas:**
-
-**Hooks (`src/hooks/`):**
-- `chat.hooks.ts` - Test `useChatStream` and `useThreadInitialization`
-  - Message sending flow
-  - Error handling
-  - Stream cancellation
-  - Thread initialization logic
-- `dashboard.hooks.ts` - Test dashboard data hooks
-  - Stats calculation
-  - Chart data generation
-  - Navigation handlers
-- `app.hooks.ts` - Test theme and responsive hooks
-
-**Stores (`src/stores/`):**
-- `thread.store.ts` - Test thread management
-  - Thread CRUD operations
-  - Message management
-  - localStorage persistence
-  - Deduplication logic
-- `auth.store.ts` - Test authentication
-  - Login/logout flow
-  - Auth state management
-- `app.store.ts` - Test UI state
-
-**Services (`src/services/`):**
-- `chat.service.ts` - Test API communication
-  - SSE streaming
-  - Error handling
-  - Message format conversion
-  - API status checks
-
-**Utils (`src/utils/`):**
-- `thread.utils.ts` - Test utility functions
-- `avatar.utils.ts` - Test avatar generation
-- `auth-guard.utils.ts` - Test auth utilities
-
-**Example Test Structure:**
+Create centralized utility in `src/utils/thread.utils.ts`:
 ```typescript
-// src/hooks/__tests__/chat.hooks.test.ts
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
-import { useChatStream } from '../chat.hooks'
-
-describe('useChatStream', () => {
-  it('should send message and handle streaming response', async () => {
-    // Test implementation
-  })
-  
-  it('should handle stream errors gracefully', async () => {
-    // Test error handling
-  })
-  
-  it('should allow stream cancellation', async () => {
-    // Test abort functionality
-  })
-})
+/**
+ * Deduplicates messages by ID, keeping the first occurrence of each ID
+ * @param messages - Array of messages to deduplicate
+ * @param context - Optional context string for logging
+ * @returns Deduplicated array of messages
+ */
+export function deduplicateMessages(
+  messages: ChatMessage[], 
+  context?: string
+): ChatMessage[]
 ```
 
-#### 2. Component Tests
+**Root Cause Analysis:**
+- Investigate why duplicates occur in the first place
+- Verify `generateMessageId()` produces unique IDs
+- Check for race conditions in streaming updates
 
-**Testing Library:** React Testing Library (user-centric testing)
+**Related Files:**
+- `src/components/chat/ChatConversation.component.tsx` - Component deduplication
+- `src/stores/thread.store.ts` - Store deduplication (3 locations)
+- `src/utils/thread.utils.ts` - Add utility function here
 
-**Test Coverage Areas:**
+---
 
-**Chat Components:**
-- `ChatWorkspace` - Test message sending, error display
-- `ChatConversation` - Test message rendering, auto-scroll
-- `ChatInput` - Test input handling, send button
-- `Message` - Test message rendering, streaming state
-- `ThreadSidebar` - Test thread selection, CRUD operations
+### Priority Tier 2 - HIGH (Do Soon)
 
-**Layout Components:**
-- `AppLayout` - Test layout structure
-- `Sidebar` - Test navigation, responsive behavior
-- `Header` - Test theme toggle, user menu
+#### 4. Testing Infrastructure
 
-**Example Test Structure:**
+**Problem:** No automated testing infrastructure. Refactoring is risky without tests.
+
+**Proposed Strategy:**
+
+**Unit Tests (Vitest):**
+- Hooks: `useChatStream`, `useThreadInitialization`
+- Stores: Thread management, auth, app state
+- Services: API communication, SSE streaming
+- Utils: Thread utilities, avatar generation
+
+**Component Tests (React Testing Library):**
+- Chat components: workspace, conversation, input, messages
+- Layout components: sidebar, header
+- Dashboard components
+
+**E2E Tests (Playwright + MSW):**
+- Complete chat flow
+- Error scenarios
+- Thread management
+- Theme switching
+
+**Test Coverage Goals:**
+- Unit tests: 80%+ for hooks, stores, services, utils
+- Component tests: 70%+ for UI components
+- E2E tests: 100% of critical user flows
+
+**Related Files:**
+- `package.json` - Add test dependencies
+- `vitest.config.ts` - To be created
+- `playwright.config.ts` - To be created
+- `src/mocks/` - MSW handlers (to be created)
+
+---
+
+#### 5. Edge Cases & Input Validation
+
+**Current State:**
+- ✅ Empty message prevention implemented
+
+**Remaining Work:**
+
+**Rapid Message Sending:**
+- Prevent multiple messages in quick succession
+- Queue messages or disable button during streaming
+- Consider debouncing send button
+
+**Long Message Handling:**
+- Ensure long messages wrap properly
+- Verify scrolling for very long messages
+- Test messages exceeding viewport height
+
+**Input Validation:**
+- Special character handling (Unicode support)
+- Maximum message length validation (e.g., 10,000 chars)
+- Character count indicator (optional)
+- Handle extremely long single-line messages
+
+**Related Files:**
+- `src/components/chat/ChatInput.component.tsx` - Add validation
+- `src/components/chat/Message.component.tsx` - Test wrapping/scrolling
+
+---
+
+#### 6. Accessibility Improvements
+
+**Current State:**
+- Basic keyboard support (Enter to send)
+- Some ARIA labels present
+
+**Remaining Work:**
+
+**ARIA Labels:**
+- Add `aria-label` to all interactive elements
+- Add `aria-describedby` for form inputs
+- Ensure all icons have accessible labels
+
+**Streaming Messages:**
+- Add `aria-live="polite"` for streaming region
+- Add `aria-busy="true"` during streaming
+- Announce when streaming starts/completes
+
+**Keyboard Navigation:**
+- Full keyboard navigation for thread list
+- Tab order optimization
+- Escape key handling for modals
+- Arrow key navigation
+
+**Screen Reader Support:**
+- Test with NVDA, JAWS, VoiceOver
+- Ensure dynamic content is announced
+- Add skip links
+- Proper heading hierarchy
+
+**Related Files:**
+- `src/components/chat/ChatInput.component.tsx` - Add ARIA
+- `src/components/chat/ChatConversation.component.tsx` - aria-live region
+- `src/components/chat/ThreadSidebar.component.tsx` - Keyboard nav
+
+---
+
+### Priority Tier 3 - MEDIUM (Polish)
+
+#### 7. Code Quality & Documentation
+
+**Code Quality:**
+- [ ] Add JSDoc comments to all functions
+- [ ] Remove/replace console.logs with proper logging
+- [ ] Fix all linter warnings
+- [ ] Ensure strict TypeScript compliance (no `any` types)
+- [ ] Extract magic numbers to constants
+- [ ] Add prop validation
+
+**Documentation:**
+- [ ] Document SSE implementation details
+- [ ] Explain secure tunnel + Netlify proxy architecture
+- [ ] Add local development instructions
+- [ ] Add production deployment guide
+- [ ] Document design decisions
+- [ ] Add troubleshooting guide
+
+**Related Files:**
+- All `src/` files - Add JSDoc
+- `src/hooks/chat.hooks.ts` - Remove console.logs
+- `src/stores/thread.store.ts` - Remove console.logs
+- `docs/system/api-integration.md` - Add SSE details
+- `README.md` - Add dev/deployment sections
+
+---
+
+#### 8. Chat Interface UI Enhancements
+
+**Scrollbar Styling:**
+- Custom scrollbar styling (match theme)
+- Thinner, more subtle design
+- Add hover states
+
+**Padding Improvements:**
+- Consistent right padding to match left
+- Ensure messages don't touch scrollbar
+- Responsive padding adjustments
+
+**Shadow Enhancements:**
+- Increase message shadow intensity (`shadow="md"` or `shadow="lg"`)
+- Add shadow to ChatInput for floating effect
+- Create layered depth effect
+
+**Related Files:**
+- `src/components/chat/ChatConversation.component.tsx` - Scrollbar styling
+- `src/components/chat/ChatInput.component.tsx` - Input shadow
+- `src/components/chat/Message.component.tsx` - Message shadows
+
+---
+
+## NEW FEATURES (User-Facing)
+
+### Priority Tier 1 - ESSENTIAL (High Impact, User-Facing)
+
+#### 1. Markdown Rendering & Code Highlighting ⭐
+
+**Why:** AI responses often include code blocks, lists, and formatted text.
+
+**Features:**
+- Render Markdown in messages (bold, italic, lists, links, headings)
+- Syntax highlighting for code blocks with language detection
+- Copy button for code blocks
+- Math equation rendering (KaTeX)
+- Tables and blockquotes support
+
+**Libraries:**
+- `react-markdown` or `marked` for Markdown parsing
+- `prism-react-renderer` or `highlight.js` for syntax highlighting
+- `katex` for math equations
+
+**Implementation:**
 ```typescript
-// src/components/chat/__tests__/ChatInput.test.tsx
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { ChatInput } from '../ChatInput.component'
+import ReactMarkdown from 'react-markdown'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 
-describe('ChatInput', () => {
-  it('should send message on button click', () => {
-    // Test implementation
-  })
-  
-  it('should disable input during streaming', () => {
-    // Test disabled state
-  })
-})
+// In Message component
+<ReactMarkdown
+  components={{
+    code({node, inline, className, children, ...props}) {
+      const match = /language-(\w+)/.exec(className || '')
+      return !inline && match ? (
+        <SyntaxHighlighter language={match[1]}>
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      ) : (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      )
+    }
+  }}
+>
+  {message.content}
+</ReactMarkdown>
 ```
 
-#### 3. E2E Tests
+**Time Estimate:** 2-3 hours  
+**Impact:** High - Essential for technical conversations
 
-**Testing Framework:** Playwright (cross-browser, reliable, fast)
+**Related Files:**
+- `src/components/chat/Message.component.tsx` - Update to render Markdown
+- `package.json` - Add markdown/syntax highlighting libraries
 
-**MSW Integration:** Mock Service Worker for API mocking
+---
 
-**Test Coverage Areas:**
+#### 2. Smart Context Window Management ⭐
 
-**User Flows:**
-- Complete chat flow: login → create thread → send message → receive response
-- Error scenarios: network errors, API failures, stream interruptions
-- Thread management: create, rename, delete threads
-- Theme switching: light/dark mode toggle
-- Responsive behavior: mobile vs desktop layouts
+**Why:** LLMs have token limits. Long conversations exceed context window.
 
-**MSW Setup:**
-```typescript
-// src/mocks/handlers.ts
-import { http, HttpResponse } from 'msw'
-import { setupServer } from 'msw/node'
+**Features:**
+- Display token count for current conversation
+- Visual progress bar showing context usage
+- Warn when approaching limit (e.g., 80%)
+- Auto-summarize old messages (lossy compression)
+- Smart context pruning (keep first/last N, summarize middle)
+- Manual message selection (checkboxes to include/exclude)
 
-export const handlers = [
-  http.post('*/v1/chat/completions', async ({ request }) => {
-    const body = await request.json()
-    // Return mocked SSE stream response
-    return HttpResponse.text(
-      'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n' +
-      'data: {"choices":[{"delta":{"content":"!"}}]}\n\n' +
-      'data: [DONE]\n\n',
-      { headers: { 'Content-Type': 'text/event-stream' } }
-    )
-  }),
-]
-
-export const server = setupServer(...handlers)
+**UI Design:**
+```
+┌─────────────────────────────────┐
+│ Context: 2,345 / 8,192 tokens   │
+│ [████████░░░░░░░░░░░] 29%      │
+│                                  │
+│ ⚠️ Approaching limit (85%)      │
+│ [Auto-Summarize] [Prune Old]   │
+└─────────────────────────────────┘
 ```
 
-**Example E2E Test:**
-```typescript
-// e2e/chat-flow.spec.ts
-import { test, expect } from '@playwright/test'
+**Implementation:**
+- Token counting library (e.g., `tiktoken` or approximation)
+- Summarization: Call LLM with "summarize these messages" prompt
+- Pruning strategy: Keep system message, first 2, last 5, summarize rest
 
-test.describe('Chat Flow', () => {
-  test('should send message and receive AI response', async ({ page }) => {
-    await page.goto('/login')
-    await page.fill('[name="username"]', 'testuser')
-    await page.fill('[name="password"]', 'password')
-    await page.click('button[type="submit"]')
-    
-    await page.waitForURL('/dashboard')
-    await page.click('text=Go to Chat')
-    
-    await page.fill('[placeholder*="message"]', 'Hello, AI!')
-    await page.click('button[aria-label="Send message"]')
-    
-    // Wait for AI response (mocked via MSW)
-    await expect(page.locator('.message')).toContainText('Hello')
-  })
-  
-  test('should handle network errors gracefully', async ({ page }) => {
-    // Test error handling with MSW error response
-  })
-})
+**Time Estimate:** 4-5 hours  
+**Impact:** High - Essential for long conversations
+
+**Related Files:**
+- `src/components/chat/ChatWorkspace.component.tsx` - Add token counter UI
+- `src/hooks/chat.hooks.ts` - Add token counting logic
+- `src/services/chat.service.ts` - Add summarization function
+
+---
+
+#### 3. Conversation Templates & Prompts Library ⭐
+
+**Why:** Save and reuse effective prompts. Power user favorite.
+
+**Features:**
+- Pre-defined prompt templates ("Code Review", "Explain Concept", "Debug Help")
+- User can create and save custom templates
+- Prompt variables (e.g., "Explain {topic} in {style}")
+- Quick access dropdown in chat input
+- Import/export prompt library
+- Template categories
+
+**UI Concept:**
+```
+┌─────────────────────────────────┐
+│ [💾] Saved Prompts         [+]  │
+│                                  │
+│ 📝 Writing                      │
+│  • Explain Like I'm 5           │
+│  • Create Blog Post Outline     │
+│                                  │
+│ 💻 Coding                       │
+│  • Code Review Template         │
+│  • Debug JavaScript Error       │
+│  • Explain Code                 │
+│                                  │
+│ 🎓 Learning                     │
+│  • Study Guide Creator          │
+│  • Quiz Me On {topic}           │
+└─────────────────────────────────┘
 ```
 
-#### 4. Test Infrastructure Setup
-
-**Required Dependencies:**
-```json
-{
-  "devDependencies": {
-    "vitest": "^2.0.0",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/user-event": "^14.0.0",
-    "@playwright/test": "^1.40.0",
-    "msw": "^2.0.0",
-    "@mswjs/data": "^2.0.0"
-  }
+**Data Structure:**
+```typescript
+interface PromptTemplate {
+  id: string
+  name: string
+  category: string
+  content: string
+  variables: string[] // ["topic", "style"]
+  createdAt: Date
+  usageCount: number
 }
 ```
 
-**Vitest Configuration (`vitest.config.ts`):**
-```typescript
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
-import tsconfigPaths from 'vite-tsconfig-paths'
+**Storage:**
+- localStorage for personal templates
+- Future: Backend storage for team sharing
 
-export default defineConfig({
-  plugins: [react(), tsconfigPaths()],
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-  },
-})
+**Time Estimate:** 3-4 hours  
+**Impact:** High - Great for power users and demos
+
+**Related Files:**
+- `src/components/chat/PromptLibrary.component.tsx` - New component
+- `src/stores/prompt.store.ts` - New Zustand store
+- `src/types/prompt.types.ts` - New types
+
+---
+
+#### 4. Stop Generation Button (AbortController UI) ⭐ 🆕
+
+**Why:** Users need ability to stop AI mid-response.
+
+**How AbortController Works:**
+```typescript
+// Already implemented in useChatStream hook
+const abortController = new AbortController()
+
+// Pass signal to fetch
+fetch(url, { signal: abortController.signal })
+
+// Stop the stream
+abortController.abort()  // Immediately stops request
 ```
 
-**Playwright Configuration (`playwright.config.ts`):**
-```typescript
-import { defineConfig } from '@playwright/test'
+**Features:**
+- Stop button visible during streaming
+- Partial response stays in chat
+- UI feedback: "Stopped by user"
+- Input re-enabled after stop
+- Option to regenerate or continue
 
-export default defineConfig({
-  testDir: './e2e',
-  use: {
-    baseURL: 'http://localhost:5173',
-  },
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-  },
-})
+**UI Design:**
+```
+AI is typing... [⏹️ Stop]  ← During streaming
+
+Response stopped.          ← After abort
+[🔄 Regenerate] [✓ OK]    ← Options
 ```
 
-### Implementation Plan
+**Implementation:**
+- Button in ChatInput or ChatWorkspace
+- Call existing `abort()` from `useChatStream`
+- Update UI to show stopped state
+- Mark message as "partial" or "stopped"
 
-1. **Phase 1: Unit Test Setup**
-   - Install Vitest and testing libraries
-   - Set up test configuration
-   - Write tests for utilities and stores (easiest to start)
-
-2. **Phase 2: Component Tests**
-   - Set up React Testing Library
-   - Write tests for chat components
-   - Test user interactions
-
-3. **Phase 3: MSW Setup**
-   - Install and configure MSW
-   - Create mock handlers for API endpoints
-   - Set up mock SSE streaming responses
-
-4. **Phase 4: E2E Tests**
-   - Install Playwright
-   - Set up E2E test configuration
-   - Write critical user flow tests
-
-5. **Phase 5: CI/CD Integration**
-   - Add test scripts to package.json
-   - Configure GitHub Actions or similar
-   - Set up test coverage reporting
-
-### Test Coverage Goals
-
-- **Unit Tests:** 80%+ coverage for hooks, stores, services, utils
-- **Component Tests:** 70%+ coverage for UI components
-- **E2E Tests:** 100% coverage of critical user flows
-- **MSW Mocks:** Mock all API endpoints, including error scenarios
-
-### Related Files
-- `package.json` - Where test dependencies should be added
-- `vitest.config.ts` - Vitest configuration (to be created)
-- `playwright.config.ts` - Playwright configuration (to be created)
-- `src/mocks/` - MSW handlers directory (to be created)
-- `src/test/` - Test utilities and setup (to be created)
-- `e2e/` - E2E test directory (to be created)
-
-## Remaining UX Enhancements
-
-### Overview
-
-Phase 6 from the roadmap includes several UX enhancements that are partially complete. The following items remain to be implemented:
-
-### Auto-Scroll Improvements
-
-**Current State:**
-- Auto-scroll is implemented inline in `ChatConversation.component.tsx`
-- Scrolls to bottom on new messages and during streaming
-- Uses smooth scroll behavior
-
-**Remaining Work:**
-- [ ] Refactor auto-scroll logic into dedicated `use-auto-scroll.hook.ts` hook
-- [ ] Detect manual scroll (don't force scroll if user has scrolled up)
-- [ ] Add scroll position tracking to prevent interrupting user's reading
+**Time Estimate:** 1-2 hours  
+**Impact:** High - Essential UX feature
 
 **Related Files:**
-- `src/components/chat/ChatConversation.component.tsx` - Current inline implementation (lines 38-69)
-- `src/hooks/` - Where new hook should be created
+- `src/components/chat/ChatInput.component.tsx` - Add stop button
+- `src/components/chat/ChatWorkspace.component.tsx` - Or add here
+- `src/hooks/chat.hooks.ts` - Already has abort() function
 
-### Additional Keyboard Shortcuts
+---
 
-**Current State:**
-- Enter to send message: ✅ Implemented
-- Shift+Enter for newline: ✅ Implemented
+### Priority Tier 2 - POWER USER (High Value, Differentiation)
 
-**Remaining Work:**
-- [ ] Escape key to clear input field
-- [ ] Focus management after sending (auto-focus input after send)
-- [ ] Tab navigation support for thread list and messages
-- [ ] Cmd/Ctrl+K to focus input (optional enhancement)
+#### 5. Multi-Model Support ⭐
 
-**Related Files:**
-- `src/components/chat/ChatInput.component.tsx` - Current keyboard handling (lines 33-38)
+**Why:** Different models for different tasks. Great showcase feature.
 
-### Visual Polish
+**Current State:** Hardcoded to `qwen2.5:0.5b`
 
-**Current State:**
-- Typing indicator animation: ✅ Implemented with Framer Motion
+**Features:**
+- Dropdown to select model before sending
+- Save model preference per thread
+- Compare mode: Same prompt to multiple models side-by-side
+- Model info cards (size, speed, strengths, weaknesses)
+- Auto-suggest model based on prompt type
 
-**Remaining Work:**
-- [ ] Message fade-in animations when messages appear
-- [ ] Hover states on messages (subtle highlight on hover)
-- [ ] Timestamps display (relative format: "Just now", "2m ago") - optional
-- [ ] Message copy functionality (copy message text to clipboard)
+**Models to Support:**
+- `qwen2.5:0.5b` (current - fast, resource-efficient)
+- `qwen2.5:1.5b` (better quality)
+- `llama3.2:1b` (Meta's model)
+- `phi-4` (Microsoft's small model)
+- `deepseek-r1:1.5b` (reasoning model)
 
-**Related Files:**
-- `src/components/chat/Message.component.tsx` - Where animations and hover states would be added
-- `src/utils/thread.utils.ts` - `formatThreadDate()` function exists but not used in Message component
+**UI Mockup:**
+```
+┌─────────────────────────────────┐
+│ [🤖] Model: qwen2.5:0.5b ▼     │
+│      Speed: ⚡⚡⚡ | Quality: ⭐⭐  │
+│                                  │
+│ Other models:                   │
+│  • qwen2.5:1.5b (Better)        │
+│  • llama3.2:1b (Fast)           │
+│  • phi-4 (Balanced)             │
+└─────────────────────────────────┘
+```
 
-## Edge Cases & Input Validation
+**Implementation:**
+- Add model selector dropdown
+- Store selected model in thread metadata
+- Pass model to API request
+- Display model badge on messages
 
-### Overview
-
-Phase 7.1 from the roadmap includes edge case handling. Some items are complete, others remain:
-
-### Current State
-
-- ✅ Empty message prevention: Implemented in `ChatInput.component.tsx` (line 25)
-
-### Remaining Edge Cases
-
-**Rapid Message Sending:**
-- [ ] Prevent sending multiple messages in quick succession
-- [ ] Options: Queue messages or disable send button during streaming
-- [ ] Consider debouncing send button clicks
-
-**Long Message Handling:**
-- [ ] Ensure long messages wrap properly
-- [ ] Verify scrolling works correctly for very long messages
-- [ ] Test with messages exceeding viewport height
-
-**Input Validation:**
-- [ ] Special character handling (ensure all Unicode characters work correctly)
-- [ ] Maximum message length validation (e.g., 10,000 characters)
-- [ ] Show character count indicator (optional)
-- [ ] Handle extremely long single-line messages
+**Time Estimate:** 2-3 hours  
+**Impact:** High - Great demo feature
 
 **Related Files:**
-- `src/components/chat/ChatInput.component.tsx` - Where validation would be added
-- `src/components/chat/Message.component.tsx` - Where wrapping/scrolling would be tested
+- `src/components/chat/ModelSelector.component.tsx` - New component
+- `src/stores/thread.store.ts` - Add model to thread metadata
+- `src/services/chat.service.ts` - Pass model parameter
+- `src/config/axios.config.ts` - Remove hardcoded DEFAULT_MODEL
 
-## Accessibility Improvements
+---
 
-### Overview
+#### 6. Message Search & Filtering System ⭐
 
-Phase 7.3 from the roadmap focuses on accessibility features for screen readers and keyboard navigation.
+**Why:** As chat history grows, users need to find past conversations.
 
-### Current State
+**Features:**
+- Full-text search across all messages in all threads
+- Filter by date range, thread, or message type (user/assistant)
+- Highlight search matches in context
+- Search history with recent searches
+- Keyboard shortcut (Cmd/Ctrl+F) for quick access
+- Search suggestions
 
-- Basic keyboard support exists (Enter to send)
-- Some ARIA labels may be present but not comprehensive
+**UI Concept:**
+```
+┌─────────────────────────────────┐
+│ [🔍] Search messages...         │
+│                                  │
+│ Filters: [Date ▼] [Thread ▼]   │
+│                                  │
+│ Results (12):                   │
+│ ───────────────────────────────│
+│ Thread: "React Help"            │
+│ User: How do I use **useEffect**? │
+│ 2 days ago                      │
+│ ───────────────────────────────│
+│ Thread: "Python Basics"         │
+│ AI: **useEffect** is a React hook... │
+│ 5 days ago                      │
+└─────────────────────────────────┘
+```
 
-### Remaining Accessibility Work
+**Implementation:**
+- Use Fuse.js for fuzzy search (client-side)
+- Or: Build search index in localStorage/IndexedDB
+- Or: Full-text search if backend added later
 
-**ARIA Labels:**
-- [ ] Add `aria-label` to all interactive elements (buttons, inputs, thread items)
-- [ ] Add `aria-describedby` for form inputs with help text
-- [ ] Ensure all icons have accessible labels
-
-**Streaming Messages:**
-- [ ] Add `aria-live="polite"` region for streaming messages
-- [ ] Add `aria-busy="true"` during streaming
-- [ ] Announce when streaming starts/completes
-
-**Keyboard Navigation:**
-- [ ] Full keyboard navigation support for thread list
-- [ ] Tab order optimization
-- [ ] Escape key handling for modals and drawers
-- [ ] Arrow key navigation in thread list
-
-**Screen Reader Support:**
-- [ ] Test with screen readers (NVDA, JAWS, VoiceOver)
-- [ ] Ensure all dynamic content is announced
-- [ ] Add skip links for main content
-- [ ] Ensure proper heading hierarchy
-
-**Related Files:**
-- `src/components/chat/ChatInput.component.tsx` - Add ARIA attributes
-- `src/components/chat/ChatConversation.component.tsx` - Add aria-live region
-- `src/components/chat/ThreadSidebar.component.tsx` - Add keyboard navigation
-- All chat components - Add ARIA labels
-
-## Code Quality & Documentation
-
-### Overview
-
-Phase 8 from the roadmap focuses on code quality improvements and comprehensive documentation.
-
-### Code Quality (Phase 8.1)
-
-**Current State:**
-- Some JSDoc comments exist but not comprehensive
-- Console.logs present throughout codebase (for debugging)
-- Linter warnings may exist
-
-**Remaining Work:**
-- [ ] Add JSDoc comments to all functions and components
-- [ ] Remove or replace console.logs with proper logging solution
-- [ ] Fix all linter warnings
-- [ ] Ensure strict TypeScript compliance (verify no `any` types)
-- [ ] Extract magic numbers to constants (timeouts, limits, etc.)
-- [ ] Add prop validation where appropriate
+**Time Estimate:** 2-3 hours  
+**Impact:** High - Essential for power users
 
 **Related Files:**
-- All source files in `src/` - Need JSDoc additions
-- `src/hooks/chat.hooks.ts` - Has console.logs for debugging
-- `src/stores/thread.store.ts` - Has console.logs for debugging
-- `src/services/chat.service.ts` - Has console.logs for debugging
+- `src/components/chat/SearchPanel.component.tsx` - New component
+- `src/hooks/search.hooks.ts` - Search logic
+- `src/stores/thread.store.ts` - Add search methods
 
-### Documentation (Phase 8.2)
+---
 
-**Current State:**
-- README.md exists and is mostly up to date
-- Architecture documentation exists
-- API integration guide exists
+### Priority Tier 3 - UX ENHANCEMENTS (Nice-to-Have)
 
-**Remaining Documentation:**
-- [ ] Document SSE implementation details (how streaming works internally)
-- [ ] Explain secure tunnel + Netlify proxy architecture (diagrams)
-- [ ] Add local development instructions (setup steps, environment variables)
-- [ ] Add production deployment guide (Netlify deployment steps)
-- [ ] Document design decisions (why certain patterns were chosen)
-- [ ] Add troubleshooting guide (common issues and solutions)
+#### 7. AI Response Regeneration & Alternatives ⭐
+
+**Why:** Get better responses. Try different variations.
+
+**Features:**
+- Regenerate button for AI responses
+- Show multiple alternative responses (A/B/C options)
+- Rate responses (thumbs up/down)
+- Provide feedback for bad responses
+- Track which responses users prefer
+- Continue generation if response was cut off
+
+**UI Design:**
+```
+┌─────────────────────────────────┐
+│ AI: [Response content...]        │
+│                                  │
+│ [👍] [👎] [🔄 Regenerate]       │
+│                                  │
+│ Alternatives: [1] [2] 3         │
+│ (showing option 3 of 3)         │
+└─────────────────────────────────┘
+```
+
+**Implementation:**
+- Add regenerate button to Message component
+- Store multiple response variants in thread
+- Track which variant is currently displayed
+- Save rating data to thread metadata
+
+**Time Estimate:** 2-3 hours  
+**Impact:** Medium-High - Improves UX significantly
 
 **Related Files:**
-- `docs/system/api-integration.md` - Add SSE implementation details
-- `docs/system/architecture.md` - Add infrastructure diagrams
-- `README.md` - Add development/deployment sections
-- `docs/` - Create new documentation files as needed
+- `src/components/chat/Message.component.tsx` - Add regenerate button
+- `src/stores/thread.store.ts` - Store response variants
+- `src/hooks/chat.hooks.ts` - Add regeneration logic
 
+---
+
+#### 8. Remaining UX Enhancements
+
+**Auto-Scroll Improvements:**
+- [ ] Refactor to dedicated `use-auto-scroll.hook.ts`
+- [ ] Detect manual scroll (don't force scroll if user scrolled up)
+- [ ] Scroll position tracking
+
+**Additional Keyboard Shortcuts:**
+- [x] Enter to send (done)
+- [x] Shift+Enter for newline (done)
+- [ ] Escape to clear input
+- [ ] Focus management after sending
+- [ ] Tab navigation for thread list
+- [ ] Cmd/Ctrl+K to focus input
+
+**Visual Polish:**
+- [x] Typing indicator animation (done)
+- [ ] Message fade-in animations
+- [ ] Hover states on messages
+- [ ] Timestamps (relative format)
+- [ ] Message copy functionality
+
+**Related Files:**
+- `src/components/chat/ChatConversation.component.tsx` - Auto-scroll
+- `src/components/chat/ChatInput.component.tsx` - Keyboard shortcuts
+- `src/components/chat/Message.component.tsx` - Visual polish
+
+---
+
+## Implementation Sprints
+
+### Sprint 1: Critical Fixes (Week 1)
+**CODE/BUGFIXES/INFRA - Priority Tier 1**
+- Robust Error Handling in Chat Interface
+- URL & Thread ID Deep Linking State Management
+- Message Deduplication Logic Cleanup
+
+**Goal:** Eliminate critical bugs and technical debt
+
+---
+
+### Sprint 2: Foundation + Essential Features (Week 2)
+**CODE/BUGFIXES/INFRA - Priority Tier 2**
+- Testing Infrastructure setup
+
+**NEW FEATURES - Priority Tier 1**
+- Markdown Rendering & Code Highlighting
+- Stop Generation Button (AbortController UI)
+
+**Goal:** Build testing foundation and essential user-facing features
+
+---
+
+### Sprint 3: Essential Features (Week 3)
+**NEW FEATURES - Priority Tier 1**
+- Smart Context Window Management
+- Conversation Templates & Prompts Library
+
+**Goal:** Power user features that differentiate the app
+
+---
+
+### Sprint 4: Power User Features (Week 4)
+**NEW FEATURES - Priority Tier 2**
+- Multi-Model Support
+- Message Search & Filtering System
+
+**Goal:** Advanced features for sophisticated users
+
+---
+
+### Sprint 5: Polish & Remaining (Week 5+)
+**CODE/BUGFIXES/INFRA - Priority Tier 2 & 3**
+- Edge Cases & Input Validation
+- Accessibility Improvements
+- Code Quality & Documentation
+- Chat Interface UI Enhancements
+
+**NEW FEATURES - Priority Tier 3**
+- AI Response Regeneration & Alternatives
+- Remaining UX Enhancements
+
+**Goal:** Production-ready polish and final touches
+
+---
+
+## Summary
+
+**Total Items:**
+- **CODE/BUGFIXES/INFRA:** 8 items (3 critical, 3 high, 2 medium)
+- **NEW FEATURES:** 8 items (4 essential, 2 power user, 2 UX enhancements)
+
+**Estimated Timeline:**
+- Sprint 1 (Week 1): Critical fixes - 15-20 hours
+- Sprint 2 (Week 2): Foundation + essentials - 12-15 hours
+- Sprint 3 (Week 3): Essential features - 10-12 hours
+- Sprint 4 (Week 4): Power user features - 8-10 hours
+- Sprint 5+ (Week 5+): Polish - 15-20 hours
+
+**Total Estimated Effort:** 60-77 hours (8-10 weeks at 8 hours/week)
+
+---
+
+*Last Updated: November 10, 2025*  
+*Next Review: After Sprint 1 completion*
