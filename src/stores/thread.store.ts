@@ -97,22 +97,12 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
       timestamp: new Date(),
     }
 
-    console.log('[STORE] Adding message:', {
-      threadId,
-      messageId: newMessage.id,
-      role: newMessage.role,
-      contentLength: newMessage.content.length,
-      contentPreview: newMessage.content.slice(0, 50) + (newMessage.content.length > 50 ? '...' : ''),
-      providedId: messageId || 'generated',
-    })
-
     set((state) => ({
       threads: state.threads.map((thread) => {
         if (thread.id === threadId) {
           // Check if message with this ID already exists to prevent duplicates
           const messageExists = thread.messages.some((msg) => msg.id === newMessage.id)
           if (messageExists) {
-            console.warn('[STORE] Message with ID already exists, skipping:', newMessage.id)
             return thread
           }
 
@@ -127,7 +117,6 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
             updatedThread.title = generateThreadTitle(updatedThread.messages)
           }
 
-          console.log('[STORE] Thread updated. Total messages:', updatedThread.messages.length)
           return updatedThread
         }
         return thread
@@ -139,13 +128,6 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
    * Updates message content (used for streaming)
    */
   updateMessage: (threadId: string, messageId: string, content: string) => {
-    console.log('[STORE] Updating message:', {
-      threadId,
-      messageId,
-      contentLength: content.length,
-      contentPreview: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
-    })
-
     set((state) => ({
       threads: state.threads.map((thread) => {
         if (thread.id === threadId) {
@@ -200,7 +182,6 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
     try {
       const storageKey = getThreadsStorageKey(userId)
       const stored = localStorage.getItem(storageKey)
-      console.log('[STORE] Loading threads for user:', userId, 'Found:', stored ? 'yes' : 'no')
       if (stored) {
         const parsed = JSON.parse(stored)
         // Convert date strings back to Date objects and deduplicate messages
@@ -214,7 +195,6 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
             }))
             .filter((msg: ChatMessage) => {
               if (seenMessageIds.has(msg.id)) {
-                console.warn('[STORE] Duplicate message ID detected during load:', msg.id, 'in thread:', thread.id)
                 return false
               }
               seenMessageIds.add(msg.id)
@@ -230,13 +210,10 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
         })
         // Sort by updatedAt descending (most recent first)
         threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-        console.log('[STORE] Loaded', threads.length, 'threads from localStorage')
         set({ threads })
-      } else {
-        console.log('[STORE] No threads found in localStorage')
       }
     } catch (error) {
-      console.error('Failed to load threads from localStorage:', error)
+      // Failed to load threads from localStorage
     }
   },
 
@@ -253,7 +230,6 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
         const seenMessageIds = new Set<string>()
         const deduplicatedMessages = thread.messages.filter((msg) => {
           if (seenMessageIds.has(msg.id)) {
-            console.warn('[STORE] Duplicate message ID detected during save:', msg.id, 'in thread:', thread.id)
             return false
           }
           seenMessageIds.add(msg.id)
@@ -272,7 +248,7 @@ export const useThreadStore = create<ThreadStore>((set, get) => ({
       )
       localStorage.setItem(storageKey, JSON.stringify(sortedThreads))
     } catch (error) {
-      console.error('Failed to save threads to localStorage:', error)
+      // Failed to save threads to localStorage
     }
   },
 

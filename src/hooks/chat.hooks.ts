@@ -28,7 +28,6 @@ export function useThreadInitialization(userId: string | undefined, threadId?: s
   useEffect(() => {
     if (!userId) return
 
-    console.log('[HOOK] useThreadInitialization: Loading threads for userId:', userId)
     loadThreads(userId)
     initializedRef.current = false // Reset initialization flag when reloading
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -53,15 +52,9 @@ export function useThreadInitialization(userId: string | undefined, threadId?: s
     lastThreadIdRef.current = threadId
     initializedRef.current = true
 
-    console.log('[HOOK] useThreadInitialization: Thread selection', {
-      threadsLength: threads.length,
-      threadId,
-    })
-
     // If threadId in URL, validate and set it
     if (threadId) {
       const thread = getThread(threadId)
-      console.log('[HOOK] useThreadInitialization: threadId in URL:', threadId, 'Found:', !!thread)
       if (thread) {
         setCurrentThread(threadId)
       } else {
@@ -86,7 +79,6 @@ export function useThreadInitialization(userId: string | undefined, threadId?: s
     // No threadId in URL, use most recent thread if available
     if (threads.length > 0) {
       const mostRecentThread = threads[0]
-      console.log('[HOOK] useThreadInitialization: No threadId in URL, using most recent:', mostRecentThread.id)
       navigate({
         to: '/chat',
         search: { threadId: mostRecentThread.id },
@@ -94,7 +86,6 @@ export function useThreadInitialization(userId: string | undefined, threadId?: s
       })
     } else {
       // No threads exist - clear current thread and let UI show empty state
-      console.log('[HOOK] useThreadInitialization: No threads exist, clearing current thread')
       // Don't set currentThreadId - just let it be null naturally
     }
   }, [userId, threadId, threads.length, navigate, setCurrentThread, getThread])
@@ -146,13 +137,6 @@ export function useChatStream() {
    */
   const sendMessage = useCallback(
     async (content: string) => {
-      console.log('[HOOK] useChatStream: sendMessage called', {
-        contentLength: content.length,
-        currentThreadId,
-        isStreaming,
-        hasUser: !!user,
-      })
-
       // Validation checks
       if (!content.trim()) {
         setError(new Error('Message content cannot be empty'))
@@ -184,13 +168,11 @@ export function useChatStream() {
           role: 'user',
           content: content.trim(),
         }
-        console.log('[HOOK] useChatStream: Adding user message to thread')
         addMessage(currentThreadId, userMessage)
 
         // Create assistant message placeholder with empty content
         const assistantMessageId = generateMessageId()
         currentMessageIdRef.current = assistantMessageId
-        console.log('[HOOK] useChatStream: Created assistant message placeholder:', assistantMessageId)
         const assistantMessage: Omit<ChatMessage, 'id' | 'timestamp'> = {
           role: 'assistant',
           content: '',
@@ -209,21 +191,15 @@ export function useChatStream() {
           (msg) => msg.role !== 'assistant' || msg.content.trim() !== ''
         )
         const apiMessages = convertMessagesToOpenAIFormat(messagesForAPI)
-        console.log('[HOOK] useChatStream: Sending', apiMessages.length, 'messages to API')
 
         // Use service layer for streaming
         const { abort } = streamChatCompletion(apiMessages, {
           onChunk: (accumulatedContent) => {
             // Update message in thread store as chunks arrive
-            console.log('[HOOK] useChatStream: onChunk callback', {
-              messageId: assistantMessageId,
-              contentLength: accumulatedContent.length,
-            })
             updateMessage(currentThreadId, assistantMessageId, accumulatedContent)
           },
           onComplete: () => {
             // Stream completed - save to localStorage
-            console.log('[HOOK] useChatStream: Stream completed, saving to localStorage')
             saveThreads(user.id)
             setIsStreaming(false)
             currentMessageIdRef.current = null
@@ -231,16 +207,13 @@ export function useChatStream() {
           },
           onError: (err) => {
             // Handle errors
-            console.error('[HOOK] useChatStream: Stream error:', err)
             if (err.name === 'AbortError') {
               // User cancelled - don't set error state, just clean up
-              console.log('[HOOK] useChatStream: Stream aborted by user')
               setIsStreaming(false)
               currentMessageIdRef.current = null
               abortRef.current = null
             } else {
               setError(err)
-              console.error('Streaming error:', err)
               setIsStreaming(false)
               currentMessageIdRef.current = null
               abortRef.current = null
@@ -250,13 +223,10 @@ export function useChatStream() {
 
         // Store abort function for cancellation
         abortRef.current = abort
-        console.log('[HOOK] useChatStream: Stream started, abort function stored')
       } catch (err) {
         // Handle unexpected errors
-        console.error('[HOOK] useChatStream: Unexpected error:', err)
         if (err instanceof Error) {
           setError(err)
-          console.error('Unexpected error:', err)
         } else {
           setError(new Error('Unknown error occurred'))
         }

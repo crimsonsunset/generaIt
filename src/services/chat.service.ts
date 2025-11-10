@@ -54,9 +54,6 @@ export function streamChatCompletion(
   const abortController = new AbortController()
   let accumulatedContent = ''
 
-  console.log('[SSE] Starting stream with', messages.length, 'messages')
-  console.log('[SSE] Request URL:', CHAT_COMPLETIONS_URL)
-
   // Start streaming in background (don't await, let it run)
   fetchEventSource(CHAT_COMPLETIONS_URL, {
     method: 'POST',
@@ -72,7 +69,6 @@ export function streamChatCompletion(
     onmessage: (event) => {
       // Handle [DONE] marker
       if (event.data === '[DONE]') {
-        console.log('[SSE] Stream completed with [DONE] marker')
         return
       }
 
@@ -84,31 +80,21 @@ export function streamChatCompletion(
         if (content) {
           // Accumulate content character-by-character
           accumulatedContent += content
-          console.log('[SSE] Chunk received:', {
-            chunkLength: content.length,
-            accumulatedLength: accumulatedContent.length,
-            preview: accumulatedContent.slice(0, 50) + (accumulatedContent.length > 50 ? '...' : ''),
-          })
           // Call onChunk callback with accumulated content
           callbacks.onChunk(accumulatedContent)
-        } else {
-          console.log('[SSE] Chunk with no content:', parsed)
         }
       } catch (parseError) {
         // Handle malformed SSE data gracefully
-        console.error('Failed to parse SSE chunk:', parseError, 'Data:', event.data)
         // Continue processing other chunks instead of failing completely
       }
     },
     onerror: (err) => {
       // Handle errors - throw to stop retrying
-      console.error('[SSE] Stream error:', err)
       callbacks.onError(err instanceof Error ? err : new Error(String(err)))
       throw err
     },
     onclose: () => {
       // Stream completed successfully
-      console.log('[SSE] Stream closed successfully. Final content length:', accumulatedContent.length)
       callbacks.onComplete()
     },
   }).catch((err) => {

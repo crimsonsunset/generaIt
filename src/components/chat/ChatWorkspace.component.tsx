@@ -11,13 +11,6 @@ export function ChatWorkspace() {
   const currentThread = useThreadStore((state) => state.getCurrentThread())
   const { sendMessage, isStreaming } = useChatStream()
 
-  console.log('[UI] ChatWorkspace: Render', {
-    hasCurrentThread: !!currentThread,
-    currentThreadId: currentThread?.id,
-    messagesCount: currentThread?.messages.length || 0,
-    isStreaming,
-  })
-
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-background">
       {/* Chat Conversation Area - Scrollable */}

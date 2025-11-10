@@ -27,7 +27,6 @@ export function ChatConversation({ isStreaming = false }: ChatConversationProps)
     const seen = new Set<string>()
     return rawMessages.filter((msg) => {
       if (seen.has(msg.id)) {
-        console.warn('[ChatConversation] Duplicate message ID detected:', msg.id)
         return false
       }
       seen.add(msg.id)
