@@ -2,6 +2,18 @@
 
 This document tracks planned improvements and refactoring opportunities for the codebase.
 
+## Executive Summary
+
+**[URL & Thread ID Deep Linking State Management](#url--thread-id-deep-linking-state-management):** Refactor complex state synchronization between URL params, Zustand store, and localStorage to eliminate race conditions and state fighting using a unified state machine or single source of truth pattern.
+
+**[Chat Interface UI Enhancements](#chat-interface-ui-enhancements):** Improve visual polish with custom scrollbar styling, consistent padding, and enhanced shadows for better depth and separation of chat interface elements.
+
+**[Message Deduplication Logic Cleanup](#message-deduplication-logic-cleanup):** Centralize duplicated message deduplication logic (currently in 4 locations) into a single utility function to improve maintainability and consistency.
+
+**[Robust Error Handling in Chat Interface](#robust-error-handling-in-chat-interface):** Implement comprehensive error handling with user-visible error displays, error categorization, retry mechanisms, and React error boundaries since errors are currently only logged to console and never shown to users.
+
+**[Testing Infrastructure](#testing-infrastructure):** Establish complete testing suite with Vitest for unit tests, React Testing Library for component tests, Playwright for E2E tests, and MSW for mocking AI responses to enable safe refactoring and catch regressions.
+
 ## URL & Thread ID Deep Linking State Management
 
 ### Problem Statement
@@ -277,4 +289,464 @@ export function deduplicateMessages(
   - `saveThreads` (lines 252-261)
 - `src/utils/thread.utils.ts` - Where new utility function should be added
 - `src/utils/thread.utils.ts` - `generateMessageId()` function to verify uniqueness
+
+## Robust Error Handling in Chat Interface
+
+### Problem Statement
+
+The current chat interface has minimal error handling that doesn't provide a good user experience:
+
+1. **Errors are captured but never displayed**
+   - `useChatStream` hook returns `error` state, but it's never destructured or used in `ChatWorkspace`
+   - All errors are only logged to console (`console.error`)
+   - Users have no visibility into what went wrong
+
+2. **No error recovery mechanisms**
+   - When a stream fails, the user has no way to retry
+   - Partial messages (from interrupted streams) are left in an incomplete state
+   - No option to cancel and retry failed requests
+
+3. **No error categorization**
+   - All errors are treated the same (network, API, parsing, etc.)
+   - No user-friendly error messages based on error type
+   - No distinction between recoverable and non-recoverable errors
+
+4. **No error boundaries**
+   - No React error boundaries to catch component-level errors
+   - Unhandled errors could crash the entire chat interface
+   - No graceful degradation when components fail
+
+5. **Limited error context**
+   - Errors don't include context about what operation failed
+   - No error metadata (timestamp, retry count, etc.)
+   - Difficult to debug production issues
+
+### Current Error Handling Gaps
+
+#### In `useChatStream` Hook (`src/hooks/chat.hooks.ts`)
+- Line 133: `error` state exists but never consumed by components
+- Lines 232-247: Errors are set but only logged
+- Line 242: Generic error handling doesn't categorize error types
+- No retry mechanism for failed streams
+- No cleanup of partial messages on error
+
+#### In `ChatWorkspace` Component (`src/components/chat/ChatWorkspace.component.tsx`)
+- Line 12: Only destructures `sendMessage` and `isStreaming`, ignores `error`
+- No error display component
+- No error recovery UI
+
+#### In `chat.service.ts` (`src/services/chat.service.ts`)
+- Lines 97-101: Parse errors are logged but don't notify user
+- Lines 103-108: Generic error callback doesn't provide error context
+- No error type classification (network vs API vs parsing)
+- No retry logic for transient failures
+
+### Proposed Improvements
+
+#### 1. Error Display Components
+
+Create error UI components to show errors to users:
+
+**`ErrorBanner.component.tsx`** - Dismissible error banner at top of chat
+- Shows error message with user-friendly text
+- Categorizes errors (network, API, parsing)
+- Includes retry button for recoverable errors
+- Auto-dismisses after timeout or manual dismiss
+- Uses HeroUI Alert/Card components for consistent styling
+
+**`ErrorMessage.component.tsx`** - Inline error message in message list
+- Shows error state for failed assistant messages
+- Displays partial content if stream was interrupted
+- Includes retry button to resend the request
+- Shows error details in expandable section
+
+**`ErrorBoundary.component.tsx`** - React error boundary wrapper
+- Catches component-level errors
+- Shows fallback UI instead of crashing
+- Logs errors for debugging
+- Provides "Reload" button to recover
+
+#### 2. Error Type Classification
+
+Create error type system in `src/types/chat.types.ts`:
+
+```typescript
+export type ChatErrorType = 
+  | 'network'      // Connection issues, timeouts
+  | 'api'          // API errors (4xx, 5xx)
+  | 'parsing'      // SSE parsing errors
+  | 'aborted'      // User cancelled
+  | 'unknown'      // Unexpected errors
+
+export interface ChatError {
+  type: ChatErrorType
+  message: string
+  originalError?: Error
+  timestamp: Date
+  retryable: boolean
+  retryCount?: number
+}
+```
+
+#### 3. Enhanced Error Handling in Service Layer
+
+**`chat.service.ts` improvements:**
+- Classify errors by type (network, API, parsing)
+- Provide error context (request details, response status)
+- Return structured error objects instead of generic Error
+- Add retry logic for transient failures (network errors)
+- Handle partial stream completion gracefully
+
+#### 4. Error Recovery Mechanisms
+
+**Retry functionality:**
+- Add `retry()` function to `useChatStream` hook
+- Store failed message context for retry
+- Implement exponential backoff for retries
+- Limit retry attempts (max 3 retries)
+
+**Partial message handling:**
+- Save partial content when stream fails
+- Mark messages as "failed" or "partial"
+- Allow user to retry from last successful chunk
+- Option to discard partial message
+
+#### 5. User-Friendly Error Messages
+
+Create error message mapping:
+
+```typescript
+const ERROR_MESSAGES = {
+  network: "Connection error. Please check your internet connection and try again.",
+  api: "The AI service is temporarily unavailable. Please try again in a moment.",
+  parsing: "Received an unexpected response. Please try again.",
+  aborted: "Request cancelled.",
+  unknown: "An unexpected error occurred. Please try again.",
+}
+```
+
+#### 6. Error Logging and Monitoring
+
+- Log errors with context to console (development)
+- Include error metadata (timestamp, error type, user action)
+- Consider error tracking service integration (Sentry, etc.) for production
+- Track error rates and patterns
+
+### Implementation Plan
+
+1. **Phase 1: Error Display**
+   - Create `ErrorBanner` component
+   - Update `ChatWorkspace` to display errors
+   - Add error prop passing through component tree
+
+2. **Phase 2: Error Classification**
+   - Add error types to `chat.types.ts`
+   - Update service layer to classify errors
+   - Create error message mapping
+
+3. **Phase 3: Error Recovery**
+   - Add retry functionality to hook
+   - Create retry UI components
+   - Implement partial message handling
+
+4. **Phase 4: Error Boundaries**
+   - Add React error boundary wrapper
+   - Wrap chat components in error boundary
+   - Add fallback UI for component errors
+
+5. **Phase 5: Enhanced Error Handling**
+   - Add retry logic with exponential backoff
+   - Improve error context and logging
+   - Add error analytics/tracking
+
+### Related Files
+- `src/hooks/chat.hooks.ts` - Hook with error state (line 133) that's never used
+- `src/components/chat/ChatWorkspace.component.tsx` - Component that ignores error state (line 12)
+- `src/services/chat.service.ts` - Service layer with minimal error handling
+- `src/types/chat.types.ts` - Where error types should be added
+- `src/components/chat/` - Where error display components should be created
+
+## Testing Infrastructure
+
+### Problem Statement
+
+The codebase currently has no automated testing infrastructure:
+
+1. **No unit tests**
+   - Hooks, stores, services, and utilities have no test coverage
+   - No validation of business logic
+   - Refactoring is risky without tests
+
+2. **No integration tests**
+   - No tests for component interactions
+   - No tests for state management flows
+   - No tests for API integration
+
+3. **No E2E tests**
+   - No browser-based testing
+   - No validation of user flows
+   - No testing of real user interactions
+
+4. **No test mocking**
+   - No MSW (Mock Service Worker) setup for API mocking
+   - No way to test error scenarios
+   - No deterministic testing of streaming responses
+
+### Proposed Testing Strategy
+
+#### 1. Unit Tests
+
+**Testing Framework:** Vitest (Vite-native, fast, compatible with Vite config)
+
+**Test Coverage Areas:**
+
+**Hooks (`src/hooks/`):**
+- `chat.hooks.ts` - Test `useChatStream` and `useThreadInitialization`
+  - Message sending flow
+  - Error handling
+  - Stream cancellation
+  - Thread initialization logic
+- `dashboard.hooks.ts` - Test dashboard data hooks
+  - Stats calculation
+  - Chart data generation
+  - Navigation handlers
+- `app.hooks.ts` - Test theme and responsive hooks
+
+**Stores (`src/stores/`):**
+- `thread.store.ts` - Test thread management
+  - Thread CRUD operations
+  - Message management
+  - localStorage persistence
+  - Deduplication logic
+- `auth.store.ts` - Test authentication
+  - Login/logout flow
+  - Auth state management
+- `app.store.ts` - Test UI state
+
+**Services (`src/services/`):**
+- `chat.service.ts` - Test API communication
+  - SSE streaming
+  - Error handling
+  - Message format conversion
+  - API status checks
+
+**Utils (`src/utils/`):**
+- `thread.utils.ts` - Test utility functions
+- `avatar.utils.ts` - Test avatar generation
+- `auth-guard.utils.ts` - Test auth utilities
+
+**Example Test Structure:**
+```typescript
+// src/hooks/__tests__/chat.hooks.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { useChatStream } from '../chat.hooks'
+
+describe('useChatStream', () => {
+  it('should send message and handle streaming response', async () => {
+    // Test implementation
+  })
+  
+  it('should handle stream errors gracefully', async () => {
+    // Test error handling
+  })
+  
+  it('should allow stream cancellation', async () => {
+    // Test abort functionality
+  })
+})
+```
+
+#### 2. Component Tests
+
+**Testing Library:** React Testing Library (user-centric testing)
+
+**Test Coverage Areas:**
+
+**Chat Components:**
+- `ChatWorkspace` - Test message sending, error display
+- `ChatConversation` - Test message rendering, auto-scroll
+- `ChatInput` - Test input handling, send button
+- `Message` - Test message rendering, streaming state
+- `ThreadSidebar` - Test thread selection, CRUD operations
+
+**Layout Components:**
+- `AppLayout` - Test layout structure
+- `Sidebar` - Test navigation, responsive behavior
+- `Header` - Test theme toggle, user menu
+
+**Example Test Structure:**
+```typescript
+// src/components/chat/__tests__/ChatInput.test.tsx
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { ChatInput } from '../ChatInput.component'
+
+describe('ChatInput', () => {
+  it('should send message on button click', () => {
+    // Test implementation
+  })
+  
+  it('should disable input during streaming', () => {
+    // Test disabled state
+  })
+})
+```
+
+#### 3. E2E Tests
+
+**Testing Framework:** Playwright (cross-browser, reliable, fast)
+
+**MSW Integration:** Mock Service Worker for API mocking
+
+**Test Coverage Areas:**
+
+**User Flows:**
+- Complete chat flow: login → create thread → send message → receive response
+- Error scenarios: network errors, API failures, stream interruptions
+- Thread management: create, rename, delete threads
+- Theme switching: light/dark mode toggle
+- Responsive behavior: mobile vs desktop layouts
+
+**MSW Setup:**
+```typescript
+// src/mocks/handlers.ts
+import { http, HttpResponse } from 'msw'
+import { setupServer } from 'msw/node'
+
+export const handlers = [
+  http.post('*/v1/chat/completions', async ({ request }) => {
+    const body = await request.json()
+    // Return mocked SSE stream response
+    return HttpResponse.text(
+      'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n' +
+      'data: {"choices":[{"delta":{"content":"!"}}]}\n\n' +
+      'data: [DONE]\n\n',
+      { headers: { 'Content-Type': 'text/event-stream' } }
+    )
+  }),
+]
+
+export const server = setupServer(...handlers)
+```
+
+**Example E2E Test:**
+```typescript
+// e2e/chat-flow.spec.ts
+import { test, expect } from '@playwright/test'
+
+test.describe('Chat Flow', () => {
+  test('should send message and receive AI response', async ({ page }) => {
+    await page.goto('/login')
+    await page.fill('[name="username"]', 'testuser')
+    await page.fill('[name="password"]', 'password')
+    await page.click('button[type="submit"]')
+    
+    await page.waitForURL('/dashboard')
+    await page.click('text=Go to Chat')
+    
+    await page.fill('[placeholder*="message"]', 'Hello, AI!')
+    await page.click('button[aria-label="Send message"]')
+    
+    // Wait for AI response (mocked via MSW)
+    await expect(page.locator('.message')).toContainText('Hello')
+  })
+  
+  test('should handle network errors gracefully', async ({ page }) => {
+    // Test error handling with MSW error response
+  })
+})
+```
+
+#### 4. Test Infrastructure Setup
+
+**Required Dependencies:**
+```json
+{
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/user-event": "^14.0.0",
+    "@playwright/test": "^1.40.0",
+    "msw": "^2.0.0",
+    "@mswjs/data": "^2.0.0"
+  }
+}
+```
+
+**Vitest Configuration (`vitest.config.ts`):**
+```typescript
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+import tsconfigPaths from 'vite-tsconfig-paths'
+
+export default defineConfig({
+  plugins: [react(), tsconfigPaths()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+  },
+})
+```
+
+**Playwright Configuration (`playwright.config.ts`):**
+```typescript
+import { defineConfig } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './e2e',
+  use: {
+    baseURL: 'http://localhost:5173',
+  },
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+  },
+})
+```
+
+### Implementation Plan
+
+1. **Phase 1: Unit Test Setup**
+   - Install Vitest and testing libraries
+   - Set up test configuration
+   - Write tests for utilities and stores (easiest to start)
+
+2. **Phase 2: Component Tests**
+   - Set up React Testing Library
+   - Write tests for chat components
+   - Test user interactions
+
+3. **Phase 3: MSW Setup**
+   - Install and configure MSW
+   - Create mock handlers for API endpoints
+   - Set up mock SSE streaming responses
+
+4. **Phase 4: E2E Tests**
+   - Install Playwright
+   - Set up E2E test configuration
+   - Write critical user flow tests
+
+5. **Phase 5: CI/CD Integration**
+   - Add test scripts to package.json
+   - Configure GitHub Actions or similar
+   - Set up test coverage reporting
+
+### Test Coverage Goals
+
+- **Unit Tests:** 80%+ coverage for hooks, stores, services, utils
+- **Component Tests:** 70%+ coverage for UI components
+- **E2E Tests:** 100% coverage of critical user flows
+- **MSW Mocks:** Mock all API endpoints, including error scenarios
+
+### Related Files
+- `package.json` - Where test dependencies should be added
+- `vitest.config.ts` - Vitest configuration (to be created)
+- `playwright.config.ts` - Playwright configuration (to be created)
+- `src/mocks/` - MSW handlers directory (to be created)
+- `src/test/` - Test utilities and setup (to be created)
+- `e2e/` - E2E test directory (to be created)
 
